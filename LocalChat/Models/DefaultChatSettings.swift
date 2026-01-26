@@ -125,6 +125,14 @@ You can help with:
         defaultSystemPrompt = Self.builtInSystemPrompt
     }
     
+    /// Get the default model as a StoreModel, falling back to the first available model
+    var defaultModel: StoreModel? {
+        if let modelId = defaultModelId {
+            return ModelStoreService.shared.allModels.first { $0.modelId == modelId }
+        }
+        return nil
+    }
+    
     /// Get the system prompt with model name and date/time substituted
     func systemPrompt(for modelName: String) -> String {
         guard systemPromptEnabled else { return "" }

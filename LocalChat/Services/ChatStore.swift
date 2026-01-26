@@ -72,9 +72,16 @@ final class ChatStore {
     func createChat(title: String = "New Chat") -> Chat {
         let defaults = DefaultChatSettings.shared
         
+        // Use the persisted default model ID, or fall back to the first available model
+        // We intentionally don't use aiService.currentModel here to keep new chats
+        // independent from whatever model is currently active in other chats
+        let modelId = defaults.defaultModelId 
+            ?? ModelStoreService.shared.allModels.first?.modelId 
+            ?? aiService.currentModel.modelId
+        
         let chat = Chat(
             title: title,
-            lastModelId: defaults.defaultModelId ?? aiService.currentModel.modelId,
+            lastModelId: modelId,
             autoGenerateTitle: defaults.autoGenerateTitle,
             customSystemPrompt: nil, // Will use default
             systemPromptEnabled: defaults.systemPromptEnabled
@@ -382,7 +389,7 @@ final class ChatStore {
         
         // Switch to the specified model if provided
         if let model = model {
-            aiService.setCurrentModel(model)
+            aiService.setCurrentModel(model, updateDefault: false)
         }
         
         let chatId = chat.id
@@ -815,16 +822,17 @@ final class ChatStore {
     // MARK: - Model Selection
     
     func setModel(_ model: StoreModel) {
-        aiService.setCurrentModel(model)
+        aiService.setCurrentModel(model, updateDefault: false)
     }
     
     /// Switch to a model by its model ID (e.g., "anthropic/claude-3.5-sonnet")
     /// Returns true if the model was found and switched to
+    /// Note: This does NOT update the default model for new chats
     @discardableResult
     func switchToModel(withId modelId: String) -> Bool {
         let modelStore = ModelStoreService.shared
         if let model = modelStore.allModels.first(where: { $0.modelId == modelId }) {
-            aiService.setCurrentModel(model)
+            aiService.setCurrentModel(model, updateDefault: false)
             return true
         }
         return false

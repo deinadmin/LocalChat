@@ -13,6 +13,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var aiService = AIService.shared
     @State private var appearanceManager = AppearanceManager.shared
+    @State private var modelStore = ModelStoreService.shared
     @State private var showAPIKeySheet = false
     @State private var selectedProvider: AIProviderType?
     @State private var showDefaultChatSettings = false
@@ -21,6 +22,13 @@ struct SettingsView: View {
     @State private var openRouterKeyConfigured = false
     @State private var perplexityKeyConfigured = false
     @State private var customEndpointsCount = 0
+    
+    /// The actual persisted default model (not aiService.currentModel)
+    private var defaultModel: StoreModel {
+        DefaultChatSettings.shared.defaultModel 
+            ?? modelStore.allModels.first 
+            ?? StoreModel.fallbackModel
+    }
     
     var body: some View {
         ZStack {
@@ -91,30 +99,30 @@ struct SettingsView: View {
                 HStack(spacing: 14) {
                     ZStack {
                         Circle()
-                            .fill(aiService.currentModel.usesGradient ? 
-                                AnyShapeStyle(aiService.currentModel.appleIntelligenceGradient.opacity(0.15)) : 
-                                AnyShapeStyle(aiService.currentModel.accentColor.opacity(0.15))
+                            .fill(defaultModel.usesGradient ? 
+                                AnyShapeStyle(defaultModel.appleIntelligenceGradient.opacity(0.15)) : 
+                                AnyShapeStyle(defaultModel.accentColor.opacity(0.15))
                             )
                             .frame(width: 48, height: 48)
                         
-                        if aiService.currentModel.isSystemIcon {
-                            Image(systemName: aiService.currentModel.iconName)
+                        if defaultModel.isSystemIcon {
+                            Image(systemName: defaultModel.iconName)
                                 .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(aiService.currentModel.usesGradient ? 
-                                    AnyShapeStyle(aiService.currentModel.appleIntelligenceGradient) : 
-                                    AnyShapeStyle(aiService.currentModel.accentColor)
+                                .foregroundStyle(defaultModel.usesGradient ? 
+                                    AnyShapeStyle(defaultModel.appleIntelligenceGradient) : 
+                                    AnyShapeStyle(defaultModel.accentColor)
                                 )
-                        } else if aiService.currentModel.isTemplateIcon {
-                            Image(aiService.currentModel.iconName)
+                        } else if defaultModel.isTemplateIcon {
+                            Image(defaultModel.iconName)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 28, height: 28)
-                                .foregroundStyle(aiService.currentModel.usesGradient ? 
-                                    AnyShapeStyle(aiService.currentModel.appleIntelligenceGradient) : 
-                                    AnyShapeStyle(aiService.currentModel.accentColor)
+                                .foregroundStyle(defaultModel.usesGradient ? 
+                                    AnyShapeStyle(defaultModel.appleIntelligenceGradient) : 
+                                    AnyShapeStyle(defaultModel.accentColor)
                                 )
                         } else {
-                            Image(aiService.currentModel.iconName)
+                            Image(defaultModel.iconName)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 28, height: 28)
@@ -126,7 +134,7 @@ struct SettingsView: View {
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(AppTheme.textPrimary)
                         
-                        Text("\(aiService.currentModel.name) · System instructions")
+                        Text("\(defaultModel.name) · System instructions")
                             .font(.system(size: 14))
                             .foregroundStyle(AppTheme.textSecondary)
                             .lineLimit(1)

@@ -179,11 +179,13 @@ struct ChatSettingsSheet: View {
                             
                             Spacer()
                             
-                            Button("Reset to Default") {
-                                systemPrompt = DefaultChatSettings.builtInSystemPrompt
+                            if systemPrompt != DefaultChatSettings.builtInSystemPrompt {
+                                Button("Reset to Default") {
+                                    systemPrompt = DefaultChatSettings.builtInSystemPrompt
+                                }
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(AppTheme.accent)
                             }
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(AppTheme.accent)
                         }
                     }
                     .padding(14)

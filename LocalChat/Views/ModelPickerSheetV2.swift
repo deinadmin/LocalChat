@@ -132,7 +132,7 @@ struct ModelPickerSheetV2: View {
     // MARK: - Actions
     
     private func selectModel(_ model: StoreModel) {
-        aiService.setCurrentModel(model)
+        aiService.setCurrentModel(model, updateDefault: false)
         dismiss()
     }
 }

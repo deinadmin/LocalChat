@@ -140,12 +140,17 @@ final class AIService {
     // MARK: - Model Selection
     
     /// Set the current model for chat
-    func setCurrentModel(_ model: StoreModel) {
+    /// - Parameters:
+    ///   - model: The model to switch to
+    ///   - updateDefault: Whether to also update the default model for new chats (default: true)
+    func setCurrentModel(_ model: StoreModel, updateDefault: Bool = true) {
         currentModel = model
         lastError = nil
         
-        // Persist as the default model
-        DefaultChatSettings.shared.defaultModelId = model.modelId
+        // Only persist as default if requested
+        if updateDefault {
+            DefaultChatSettings.shared.defaultModelId = model.modelId
+        }
     }
     
     /// Check if the current model is ready to use

@@ -124,7 +124,7 @@ struct ModelStoreView: View {
                 .padding(.horizontal, 20)
             }
         }
-        .padding(.top, 16)
+        .scrollClipDisabled()
     }
     
     // MARK: - Category Pills
@@ -160,6 +160,7 @@ struct ModelStoreView: View {
                 .padding(.horizontal, 20)
             }
         }
+        .scrollClipDisabled()
     }
     
     // MARK: - Models Grid
@@ -206,7 +207,7 @@ struct FeaturedModelCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(alignment: .top) {
                 // Icon
                 ZStack {
                     Circle()
@@ -282,7 +283,7 @@ struct FeaturedModelCard: View {
             }
         }
         .padding(16)
-        .frame(width: 260, height: 180)
+        .frame(width: 260)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20))
         .glassEffectID(model.id, in: namespace)
     }

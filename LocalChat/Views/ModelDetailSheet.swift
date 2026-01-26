@@ -445,8 +445,8 @@ struct ModelDetailSheet: View {
     }
     
     private func startNewChat() {
-        // Set the model as current
-        aiService.setCurrentModel(model)
+        // Set the model as current (but don't change the default for new chats)
+        aiService.setCurrentModel(model, updateDefault: false)
         
         // Create a new chat
         let newChat = Chat(title: "Chat with \(model.name)")

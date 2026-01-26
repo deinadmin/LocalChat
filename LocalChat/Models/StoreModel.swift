@@ -284,6 +284,38 @@ struct CustomEndpointModel: Identifiable, Codable, Hashable {
 // MARK: - Sample Models for Development
 
 extension StoreModel {
+    /// A fallback model used when no default is set and no models are available
+    static let fallbackModel = StoreModel(
+        id: "fallback",
+        name: "No Model Selected",
+        provider: "Select a model",
+        providerType: .openRouter,
+        description: "Please select a model from the Model Store",
+        modelId: "fallback",
+        contextLength: 0,
+        maxOutputTokens: 0,
+        inputModalities: [.text],
+        outputModalities: [.text],
+        capabilities: [.chat],
+        supportsStreaming: false,
+        supportsSystemMessage: false,
+        supportsFunctionCalling: false,
+        inputPricePerMillion: nil,
+        outputPricePerMillion: nil,
+        iconName: "questionmark.circle",
+        isSystemIcon: true,
+        accentColorHex: "#8E8E93",
+        category: .flagship,
+        tags: [],
+        isAvailable: false,
+        isFeatured: false,
+        isNew: false,
+        releaseDate: Date(),
+        lastUpdated: Date(),
+        requiresAPIKey: false,
+        minimumIOSVersion: nil
+    )
+    
     static let sampleModels: [StoreModel] = [
         // OpenRouter Models
         StoreModel(

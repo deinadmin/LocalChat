@@ -90,6 +90,15 @@ struct NewChatView: View {
         .sheet(isPresented: $showModelPicker) {
             ModelPickerSheetV2()
         }
+        .onAppear {
+            // Set the current model to the default model when starting a new chat
+            // This ensures new chats show the default, not whatever model was last used
+            if let defaultModel = DefaultChatSettings.shared.defaultModel {
+                aiService.setCurrentModel(defaultModel, updateDefault: false)
+            } else if let firstModel = ModelStoreService.shared.allModels.first {
+                aiService.setCurrentModel(firstModel, updateDefault: false)
+            }
+        }
     }
     
     // MARK: - Empty State (Claude greeting style)
