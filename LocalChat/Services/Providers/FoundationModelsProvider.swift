@@ -32,6 +32,37 @@ actor FoundationModelsProvider: AIProvider {
         return false
     }
     
+    /// Check if Apple Intelligence is fully available and enabled on this device
+    /// This checks the actual runtime availability, not just OS version support
+    nonisolated static var isAppleIntelligenceAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let availability = SystemLanguageModel.default.availability
+            return availability == .available
+        }
+        #endif
+        return false
+    }
+    
+    /// Get the reason why Apple Intelligence is unavailable, if any
+    nonisolated static var unavailabilityReason: String? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let availability = SystemLanguageModel.default.availability
+            switch availability {
+            case .available:
+                return nil
+            case .unavailable(let reason):
+                // Return a user-friendly description of the unavailability reason
+                return String(describing: reason)
+            @unknown default:
+                return "Unknown availability status"
+            }
+        }
+        #endif
+        return "Requires iOS 26 or later"
+    }
+    
     init(configuration: ProviderConfiguration = ProviderConfiguration(providerType: .foundationModels)) {
         self.configuration = configuration
     }

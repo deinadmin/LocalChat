@@ -168,7 +168,9 @@ struct ModelPickerRow: View {
                             )
                     } else if model.isTemplateIcon {
                         Image(model.iconName)
+                            .renderingMode(.template)
                             .resizable()
+                            .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
                             .foregroundStyle(model.usesGradient ? 
@@ -178,6 +180,7 @@ struct ModelPickerRow: View {
                     } else {
                         Image(model.iconName)
                             .resizable()
+                            .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 24, height: 24)
                     }

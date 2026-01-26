@@ -418,15 +418,18 @@ struct OpenRouterModel: Decodable, Identifiable {
             if mods.contains("file") { inputMods.append(.file) }
         }
         
-        // Determine category and icon based on model name
-        let (category, iconName, accentColor) = categorizeModel(id: id, name: name)
-        
         // Extract provider from model ID (e.g., "anthropic/claude-3" -> "Anthropic")
         let provider = extractProvider(from: id)
         
+        // Extract clean model title (remove publisher prefix like "OpenAI: " from name)
+        let modelTitle = extractModelTitle(from: name)
+        
+        // Determine category, icon, and color based on provider and model name
+        let (category, iconName, accentColor, isSystemIcon) = categorizeModel(id: id, name: name, provider: provider)
+        
         return StoreModel(
             id: id,
-            name: name,
+            name: modelTitle,
             provider: provider,
             providerType: .openRouter,
             description: description ?? "Model available via OpenRouter",
@@ -442,7 +445,7 @@ struct OpenRouterModel: Decodable, Identifiable {
             inputPricePerMillion: inputPrice,
             outputPricePerMillion: outputPrice,
             iconName: iconName,
-            isSystemIcon: true,
+            isSystemIcon: isSystemIcon,
             accentColorHex: accentColor,
             category: category,
             tags: generateTags(name: name, id: id),
@@ -470,39 +473,102 @@ struct OpenRouterModel: Decodable, Identifiable {
         case "x-ai": return "xAI"
         case "cohere": return "Cohere"
         case "perplexity": return "Perplexity"
+        case "nvidia": return "Nvidia"
+        case "aion-labs": return "Aion Labs"
+        case "minimax": return "Minimax"
+        case "bytedance": return "ByteDance"
+        case "qwen": return "Qwen"
+        case "openrouter": return "OpenRouter"
+        case "z-ai": return "Z.ai"
         default: return String(providerSlug).capitalized
         }
     }
     
-    private func categorizeModel(id: String, name: String) -> (StoreModel.ModelCategory, String, String) {
+    /// Extract clean model title by removing publisher prefix from name
+    /// e.g., "OpenAI: GPT-5.2" -> "GPT-5.2"
+    private func extractModelTitle(from name: String) -> String {
+        // Common patterns: "Publisher: Model Name" or "Publisher/Model Name"
+        if let colonRange = name.range(of: ": ") {
+            return String(name[colonRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+        }
+        return name
+    }
+    
+    /// Categorize model and determine icon/color based on provider and model characteristics
+    /// Returns (category, iconName, accentColorHex, isSystemIcon)
+    private func categorizeModel(id: String, name: String, provider: String) -> (StoreModel.ModelCategory, String, String, Bool) {
         let lowerId = id.lowercased()
         let lowerName = name.lowercased()
         
-        if lowerId.contains("flash") || lowerName.contains("flash") || lowerName.contains("mini") {
-            return (.fast, "bolt.fill", "#4285F4")
+        // First, determine the category based on model characteristics
+        let category: StoreModel.ModelCategory
+        if lowerId.contains("flash") || lowerName.contains("flash") || lowerName.contains("mini") || lowerName.contains("instant") {
+            category = .fast
         } else if lowerId.contains("vision") || lowerName.contains("vision") {
-            return (.vision, "eye.fill", "#8E44AD")
+            category = .vision
         } else if lowerId.contains("code") || lowerName.contains("code") || lowerName.contains("codex") {
-            return (.coding, "chevron.left.forwardslash.chevron.right", "#27AE60")
-        } else if lowerId.contains("reasoning") || lowerId.contains("-r1") || lowerName.contains("think") {
-            return (.reasoning, "brain.head.profile", "#9B59B6")
-        } else if lowerId.contains("claude") {
-            return (.flagship, "sparkles", "#D97757")
-        } else if lowerId.contains("gpt") || lowerId.contains("openai") {
-            return (.flagship, "brain.head.profile", "#10A37F")
-        } else if lowerId.contains("gemini") || lowerId.contains("google") {
-            return (.flagship, "sparkles", "#4285F4")
-        } else if lowerId.contains("grok") {
-            return (.flagship, "xmark.octagon", "#1DA1F2")
-        } else if lowerId.contains("llama") || lowerId.contains("meta") {
-            return (.flagship, "flame.fill", "#0467DF")
-        } else if lowerId.contains("mistral") {
-            return (.flagship, "wind", "#FF6B35")
-        } else if lowerId.contains("deepseek") {
-            return (.reasoning, "lightbulb.fill", "#5B6EE1")
+            category = .coding
+        } else if lowerId.contains("reasoning") || lowerId.contains("-r1") || lowerName.contains("think") || lowerId.contains("deepseek") {
+            category = .reasoning
+        } else {
+            category = .flagship
         }
         
-        return (.flagship, "cpu", "#6C757D")
+        // Determine icon and color based on provider (use asset catalog for known publishers)
+        switch provider.lowercased() {
+        // Providers with colored icons
+        case "openai":
+            return (category, "openai-icon", "#000000", false)
+        case "anthropic":
+            return (category, "claude-icon", "#D97757", false)
+        case "google":
+            return (category, "gemini-icon", "#000000", false)
+        case "xai":
+            return (category, "grok-icon", "#000000", false)
+        case "perplexity":
+            return (category, "perplexity-icon", "#22B8CD", false)
+        case "deepseek":
+            return (category, "deepseek-icon", "#000000", false)
+        case "mistral":
+            return (category, "mistral-icon", "#000000", false)
+        case "nvidia":
+            return (category, "nvidia-icon", "#000000", false)
+        case "aion labs":
+            return (category, "aion-labs-icon", "#000000", false)
+        case "minimax":
+            return (category, "minimax-icon", "#000000", false)
+        case "bytedance":
+            return (category, "bytedance-icon", "#000000", false)
+        case "qwen":
+            return (category, "qwen-icon", "#000000", false)
+            
+        // Providers with black/white template icons (like grok)
+        case "openrouter":
+            return (category, "openrouter-icon", "#000000", false)
+        case "z.ai":
+            return (category, "zai-icon", "#000000", false)
+            
+        default:
+            // For other providers, use SF Symbols and determine color based on model family
+            let (icon, color) = determineIconAndColorForUnknownProvider(id: lowerId, name: lowerName)
+            return (category, icon, color, true)
+        }
+    }
+    
+    /// Determine icon and color for providers not in our known list
+    private func determineIconAndColorForUnknownProvider(id: String, name: String) -> (String, String) {
+        if id.contains("llama") || id.contains("meta") {
+            return ("flame.fill", "#0467DF")
+        } else if id.contains("cohere") {
+            return ("waveform", "#D18EE2")
+        } else if name.contains("vision") || id.contains("vision") {
+            return ("eye.fill", "#8E44AD")
+        } else if name.contains("code") || id.contains("code") {
+            return ("chevron.left.forwardslash.chevron.right", "#27AE60")
+        } else if name.contains("flash") || id.contains("flash") {
+            return ("bolt.fill", "#4285F4")
+        }
+        return ("cpu", "#6C757D")
     }
     
     private func determineCapabilities(name: String) -> [StoreModel.Capability] {

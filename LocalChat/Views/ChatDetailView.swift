@@ -194,7 +194,9 @@ struct ChatDetailView: View {
                 )
         } else if selectedModel.isTemplateIcon {
             Image(selectedModel.iconName)
+                .renderingMode(.template)
                 .resizable()
+                .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 44, height: 44)
                 .foregroundStyle(selectedModel.usesGradient ? 
@@ -204,6 +206,7 @@ struct ChatDetailView: View {
         } else {
             Image(selectedModel.iconName)
                 .resizable()
+                .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 44, height: 44)
         }
@@ -472,7 +475,7 @@ struct ChatDetailView: View {
                         let isGenerating = isGeneratingTemporary || isChatGenerating
                         Image(systemName: isGenerating ? "stop.fill" : (canSend ? "arrow.up" : "waveform"))
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(isGenerating ? Color.red.contrastingTextColor : selectedModel.accentColor.contrastingTextColor)
+                            .foregroundStyle(isGenerating ? Color.red.contrastingTextColor : selectedModel.buttonTextColor)
                             .frame(width: buttonSize, height: buttonSize)
                             .background {
                                 if isGenerating {
@@ -509,11 +512,13 @@ struct ChatDetailView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(selectedModel.usesGradient ? 
                     AnyShapeStyle(selectedModel.appleIntelligenceGradient) : 
-                    AnyShapeStyle(AppTheme.textPrimary)
+                    AnyShapeStyle(selectedModel.accentColor)
                 )
         } else if selectedModel.isTemplateIcon {
             Image(selectedModel.iconName)
+                .renderingMode(.template)
                 .resizable()
+                .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 18, height: 18)
                 .foregroundStyle(selectedModel.usesGradient ? 
@@ -523,6 +528,7 @@ struct ChatDetailView: View {
         } else {
             Image(selectedModel.iconName)
                 .resizable()
+                .interpolation(.high)
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 18, height: 18)
         }

@@ -116,6 +116,7 @@ final class ChatStore {
         guard !isGenerating(chatId: chat.id) else { return }
         
         let chatId = chat.id
+        let isFirstMessage = chat.messages.isEmpty
         
         // Create user message
         let userMessage = Message(content: content, isFromUser: true)
@@ -125,6 +126,12 @@ final class ChatStore {
         
         // Save the current model ID to the chat
         chat.lastModelId = currentModel.modelId
+        
+        // For the first message, lock in the system prompt so future changes
+        // to the default won't affect this chat
+        if isFirstMessage && chat.customSystemPrompt == nil {
+            chat.customSystemPrompt = DefaultChatSettings.shared.defaultSystemPrompt
+        }
         
         // For the first message, use simple fallback title immediately
         if chat.title == "New Chat" && chat.messages.count == 1 {

@@ -96,7 +96,9 @@ struct ModelDetailSheet: View {
                         )
                 } else if model.isTemplateIcon {
                     Image(model.iconName)
+                        .renderingMode(.template)
                         .resizable()
+                        .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 44, height: 44)
                         .foregroundStyle(model.usesGradient ? 
@@ -106,6 +108,7 @@ struct ModelDetailSheet: View {
                 } else {
                     Image(model.iconName)
                         .resizable()
+                        .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 44, height: 44)
                 }
@@ -363,7 +366,7 @@ struct ModelDetailSheet: View {
                 Text("Start Chat")
             }
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(model.accentColor.contrastingTextColor)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
         }

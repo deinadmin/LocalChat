@@ -19,12 +19,7 @@ actor ChatTitleService {
     
     /// Check if Apple Intelligence is available for title generation
     var isAppleIntelligenceAvailable: Bool {
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, macOS 26.0, *) {
-            return true
-        }
-        #endif
-        return false
+        FoundationModelsProvider.isAppleIntelligenceAvailable
     }
     
     /// Generate a title for a chat based on its messages

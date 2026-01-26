@@ -178,37 +178,39 @@ struct SettingsView: View {
                     isConfigured: perplexityKeyConfigured
                 )
                 
-                Divider()
-                    .padding(.horizontal, 14)
-                
-                // Foundation Models (Apple)
-                HStack {
-                    Image(systemName: "apple.intelligence")
-                        .font(.system(size: 18))
-                        .foregroundStyle(AppTheme.textSecondary)
-                        .frame(width: 24)
+                // Foundation Models (Apple) - Only show if available
+                if FoundationModelsProvider.isAppleIntelligenceAvailable {
+                    Divider()
+                        .padding(.horizontal, 14)
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Apple Intelligence")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(AppTheme.textPrimary)
-                        
-                        Text("On-device, no API key needed")
-                            .font(.system(size: 13))
+                    HStack {
+                        Image(systemName: "apple.intelligence")
+                            .font(.system(size: 18))
                             .foregroundStyle(AppTheme.textSecondary)
+                            .frame(width: 24)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Apple Intelligence")
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(AppTheme.textPrimary)
+                            
+                            Text("On-device, no API key needed")
+                                .font(.system(size: 13))
+                                .foregroundStyle(AppTheme.textSecondary)
+                        }
+                        
+                        Spacer()
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Available")
+                                .foregroundStyle(.green)
+                        }
+                        .font(.system(size: 12, weight: .medium))
                     }
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                        Text("Available")
-                            .foregroundStyle(.green)
-                    }
-                    .font(.system(size: 12, weight: .medium))
+                    .padding(14)
                 }
-                .padding(14)
             }
             .background {
                 RoundedRectangle(cornerRadius: 16)

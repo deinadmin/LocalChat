@@ -65,12 +65,27 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
         case "perplexity":
             return Color("perplexity-color")
         case "apple":
-            // Apple Intelligence uses rainbow gradient color
             return Color("apple-intelligence-color")
         case "openai":
-            // OpenAI uses green color #16B28B
             return Color("openai-color")
         case "xai":
+            return Color("grok-color")
+        case "deepseek":
+            return Color("deepseek-color")
+        case "mistral":
+            return Color("mistral-color")
+        case "nvidia":
+            return Color("nvidia-color")
+        case "aion labs":
+            return Color("aion-labs-color")
+        case "minimax":
+            return Color("minimax-color")
+        case "bytedance":
+            return Color("bytedance-color")
+        case "qwen":
+            return Color("qwen-color")
+        // Black/white template icons - use grok-color which adapts to light/dark mode
+        case "openrouter", "z.ai":
             return Color("grok-color")
         default:
             return Color(hex: accentColorHex) ?? .blue
@@ -99,11 +114,36 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
     /// Icons that are template images (monochrome) and should use .primary foreground
     var isTemplateIcon: Bool {
         switch iconName {
-        case "openai-icon", "grok-icon":
+        case "openai-icon", "grok-icon", "openrouter-icon", "zai-icon":
             return true
         default:
             return false
         }
+    }
+    
+    /// Whether this model uses a monochrome/B&W accent color that adapts to light/dark mode
+    /// For these models, the button background is black in light mode and white in dark mode
+    var isMonochromeAccent: Bool {
+        switch provider.lowercased() {
+        case "openrouter", "z.ai", "xai":
+            return true
+        default:
+            return false
+        }
+    }
+    
+    /// Returns the appropriate contrasting text color for buttons with this model's accent color
+    /// For monochrome models, returns the opposite of .primary (white in light mode, black in dark mode)
+    /// For regular models, calculates based on the accent color's luminance
+    var buttonTextColor: Color {
+        if isMonochromeAccent {
+            // For monochrome accents (.primary), return the opposite color
+            // .primary is black in light mode, white in dark mode
+            // So we need white text in light mode, black text in dark mode
+            // This is effectively the background color
+            return Color(UIColor.systemBackground)
+        }
+        return accentColor.contrastingTextColor
     }
     
     var formattedContextLength: String {

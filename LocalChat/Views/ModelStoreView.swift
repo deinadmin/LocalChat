@@ -226,7 +226,9 @@ struct FeaturedModelCard: View {
                             )
                     } else if model.isTemplateIcon {
                         Image(model.iconName)
+                            .renderingMode(.template)
                             .resizable()
+                            .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 28, height: 28)
                             .foregroundStyle(model.usesGradient ? 
@@ -236,6 +238,7 @@ struct FeaturedModelCard: View {
                     } else {
                         Image(model.iconName)
                             .resizable()
+                            .interpolation(.high)
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 28, height: 28)
                     }
@@ -346,7 +349,9 @@ struct ModelCardView: View {
                         )
                 } else if model.isTemplateIcon {
                     Image(model.iconName)
+                        .renderingMode(.template)
                         .resizable()
+                        .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 28, height: 28)
                         .foregroundStyle(model.usesGradient ? 
@@ -356,6 +361,7 @@ struct ModelCardView: View {
                 } else {
                     Image(model.iconName)
                         .resizable()
+                        .interpolation(.high)
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 28, height: 28)
                 }

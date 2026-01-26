@@ -110,17 +110,38 @@ final class ModelStoreService {
     }
     
     /// Get all available models (Firestore + OpenRouter + custom)
+    /// When OpenRouter models are available, use those instead of pre-configured sample models
     var allModels: [StoreModel] {
-        // Combine all sources, prioritizing sample models (curated) then OpenRouter
         var combined: [StoreModel] = []
         
-        // Add curated sample models first
-        combined.append(contentsOf: models)
+        // If we have OpenRouter models, use those as the primary source
+        // (they are dynamically fetched and more up-to-date)
+        if !openRouterModels.isEmpty {
+            // Use OpenRouter models as the main source
+            combined.append(contentsOf: openRouterModels)
+        } else {
+            // Fall back to curated sample models when OpenRouter is not available
+            combined.append(contentsOf: models)
+        }
         
-        // Add OpenRouter models that aren't already in the curated list
-        let existingIds = Set(combined.map { $0.id })
-        let newOpenRouterModels = openRouterModels.filter { !existingIds.contains($0.id) }
-        combined.append(contentsOf: newOpenRouterModels)
+        // Only include Apple Intelligence (on-device) model if it's fully available and enabled
+        // since it's not fetched from OpenRouter
+        if FoundationModelsProvider.isAppleIntelligenceAvailable {
+            if let appleModel = models.first(where: { $0.providerType == .foundationModels }) {
+                if !combined.contains(where: { $0.id == appleModel.id }) {
+                    combined.append(appleModel)
+                }
+            }
+        }
+        
+        // Always include Perplexity models from sample list if user has Perplexity configured
+        // since those use direct Perplexity API, not OpenRouter
+        let perplexityModels = models.filter { $0.providerType == .perplexity }
+        for perplexityModel in perplexityModels {
+            if !combined.contains(where: { $0.id == perplexityModel.id }) {
+                combined.append(perplexityModel)
+            }
+        }
         
         // Add custom endpoints
         combined.append(contentsOf: customEndpoints.map { $0.toStoreModel() })
