@@ -7,11 +7,11 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		C3393A152F1EE25B0056A74C /* LocalChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C3EE4E5F2F1D95EA0066EB2C /* LocalChat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LocalChat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		C3393A172F1EE25B0056A74C /* LocalChat */ = {
+		C3EE4E612F1D95EA0066EB2C /* LocalChat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = LocalChat;
 			sourceTree = "<group>";
@@ -19,7 +19,7 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		C3393A122F1EE25B0056A74C /* Frameworks */ = {
+		C3EE4E5C2F1D95EA0066EB2C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -29,18 +29,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		C3393A0C2F1EE25B0056A74C = {
+		C3EE4E562F1D95EA0066EB2C = {
 			isa = PBXGroup;
 			children = (
-				C3393A172F1EE25B0056A74C /* LocalChat */,
-				C3393A162F1EE25B0056A74C /* Products */,
+				C3EE4E612F1D95EA0066EB2C /* LocalChat */,
+				C3EE4E602F1D95EA0066EB2C /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		C3393A162F1EE25B0056A74C /* Products */ = {
+		C3EE4E602F1D95EA0066EB2C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C3393A152F1EE25B0056A74C /* LocalChat.app */,
+				C3EE4E5F2F1D95EA0066EB2C /* LocalChat.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,64 +48,64 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C3393A142F1EE25B0056A74C /* LocalChat */ = {
+		C3EE4E5E2F1D95EA0066EB2C /* LocalChat */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C3393A202F1EE25F0056A74C /* Build configuration list for PBXNativeTarget "LocalChat" */;
+			buildConfigurationList = C3EE4E6A2F1D95EB0066EB2C /* Build configuration list for PBXNativeTarget "LocalChat" */;
 			buildPhases = (
-				C3393A112F1EE25B0056A74C /* Sources */,
-				C3393A122F1EE25B0056A74C /* Frameworks */,
-				C3393A132F1EE25B0056A74C /* Resources */,
+				C3EE4E5B2F1D95EA0066EB2C /* Sources */,
+				C3EE4E5C2F1D95EA0066EB2C /* Frameworks */,
+				C3EE4E5D2F1D95EA0066EB2C /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				C3393A172F1EE25B0056A74C /* LocalChat */,
+				C3EE4E612F1D95EA0066EB2C /* LocalChat */,
 			);
 			name = LocalChat;
 			packageProductDependencies = (
 			);
 			productName = LocalChat;
-			productReference = C3393A152F1EE25B0056A74C /* LocalChat.app */;
+			productReference = C3EE4E5F2F1D95EA0066EB2C /* LocalChat.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		C3393A0D2F1EE25B0056A74C /* Project object */ = {
+		C3EE4E572F1D95EA0066EB2C /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
-					C3393A142F1EE25B0056A74C = {
+					C3EE4E5E2F1D95EA0066EB2C = {
 						CreatedOnToolsVersion = 26.2;
 					};
 				};
 			};
-			buildConfigurationList = C3393A102F1EE25B0056A74C /* Build configuration list for PBXProject "LocalChat" */;
+			buildConfigurationList = C3EE4E5A2F1D95EA0066EB2C /* Build configuration list for PBXProject "LocalChat" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = C3393A0C2F1EE25B0056A74C;
+			mainGroup = C3EE4E562F1D95EA0066EB2C;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = C3393A162F1EE25B0056A74C /* Products */;
+			productRefGroup = C3EE4E602F1D95EA0066EB2C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C3393A142F1EE25B0056A74C /* LocalChat */,
+				C3EE4E5E2F1D95EA0066EB2C /* LocalChat */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		C3393A132F1EE25B0056A74C /* Resources */ = {
+		C3EE4E5D2F1D95EA0066EB2C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -115,7 +115,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		C3393A112F1EE25B0056A74C /* Sources */ = {
+		C3EE4E5B2F1D95EA0066EB2C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -125,7 +125,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		C3393A1E2F1EE25F0056A74C /* Debug */ = {
+		C3EE4E682F1D95EB0066EB2C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -160,6 +160,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = L7QA44TPN4;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -188,7 +189,7 @@
 			};
 			name = Debug;
 		};
-		C3393A1F2F1EE25F0056A74C /* Release */ = {
+		C3EE4E692F1D95EB0066EB2C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -223,6 +224,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = L7QA44TPN4;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -244,20 +246,24 @@
 			};
 			name = Release;
 		};
-		C3393A212F1EE25F0056A74C /* Debug */ = {
+		C3EE4E6B2F1D95EB0066EB2C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = L7QA44TPN4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LocalChat needs to access the mic for dictation.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LocalChat needs to access speech recognition for dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIStatusBarStyle = "";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -275,20 +281,24 @@
 			};
 			name = Debug;
 		};
-		C3393A222F1EE25F0056A74C /* Release */ = {
+		C3EE4E6C2F1D95EB0066EB2C /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = L7QA44TPN4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LocalChat needs to access the mic for dictation.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LocalChat needs to access speech recognition for dictation.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIStatusBarStyle = "";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -309,25 +319,25 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C3393A102F1EE25B0056A74C /* Build configuration list for PBXProject "LocalChat" */ = {
+		C3EE4E5A2F1D95EA0066EB2C /* Build configuration list for PBXProject "LocalChat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C3393A1E2F1EE25F0056A74C /* Debug */,
-				C3393A1F2F1EE25F0056A74C /* Release */,
+				C3EE4E682F1D95EB0066EB2C /* Debug */,
+				C3EE4E692F1D95EB0066EB2C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C3393A202F1EE25F0056A74C /* Build configuration list for PBXNativeTarget "LocalChat" */ = {
+		C3EE4E6A2F1D95EB0066EB2C /* Build configuration list for PBXNativeTarget "LocalChat" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C3393A212F1EE25F0056A74C /* Debug */,
-				C3393A222F1EE25F0056A74C /* Release */,
+				C3EE4E6B2F1D95EB0066EB2C /* Debug */,
+				C3EE4E6C2F1D95EB0066EB2C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = C3393A0D2F1EE25B0056A74C /* Project object */;
+	rootObject = C3EE4E572F1D95EA0066EB2C /* Project object */;
 }
