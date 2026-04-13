@@ -12,6 +12,7 @@ import SwiftUI
 /// Represents a filter option in the Model Store (category or provider)
 enum ModelStoreFilter: Hashable {
     case all
+    case library
     case category(StoreModel.ModelCategory)
     case provider(String)
     
@@ -19,6 +20,8 @@ enum ModelStoreFilter: Hashable {
         switch self {
         case .all:
             return "All"
+        case .library:
+            return "Library"
         case .category(let category):
             return category.rawValue
         case .provider(let provider):
@@ -30,6 +33,8 @@ enum ModelStoreFilter: Hashable {
         switch self {
         case .all:
             return "square.grid.2x2"
+        case .library:
+            return "books.vertical"
         case .category(let category):
             return category.iconName
         case .provider(let provider):
@@ -45,7 +50,7 @@ enum ModelStoreFilter: Hashable {
     
     var isSystemIcon: Bool {
         switch self {
-        case .all, .category:
+        case .all, .library, .category:
             return true
         case .provider:
             return false
@@ -65,6 +70,7 @@ enum ModelStoreFilter: Hashable {
     static var allFilters: [ModelStoreFilter] {
         [
             .all,
+            .library,
             .category(.flagship),
             .category(.fast),
             .category(.reasoning),
@@ -96,6 +102,9 @@ struct ModelStoreView: View {
         switch selectedFilter {
         case .all:
             break // No filtering
+            
+        case .library:
+            result = modelStore.libraryModels
             
         case .category(let category):
             if category == .free {
@@ -132,6 +141,8 @@ struct ModelStoreView: View {
         switch selectedFilter {
         case .all:
             return "All Models"
+        case .library:
+            return "Library"
         case .category(let category):
             return category.rawValue
         case .provider(let provider):

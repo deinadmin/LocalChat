@@ -34,16 +34,24 @@ final class ModelStoreService {
     // Firestore collection name
     private let collectionName = "models"
     
+    // Library: user-selected models that appear in the model picker
+    private(set) var libraryModelIds: Set<String> = []
+    
     // UserDefaults keys
     private let cachedModelsKey = "cachedStoreModels"
     private let cachedOpenRouterModelsKey = "cachedOpenRouterModels"
     private let customEndpointsKey = "customEndpoints"
     private let lastUpdatedKey = "modelsLastUpdated"
+    private let libraryModelIdsKey = "libraryModelIds"
+    
+    /// The Apple Intelligence model ID that is always in the library
+    static let appleIntelligenceId = "apple-foundation-model"
     
     private init() {
         loadCachedModels()
         loadCachedOpenRouterModels()
         loadCustomEndpoints()
+        loadLibrary()
     }
     
     // MARK: - Public Methods
@@ -201,6 +209,55 @@ final class ModelStoreService {
     /// Get a custom endpoint by ID
     func customEndpoint(byId id: UUID) -> CustomEndpointModel? {
         customEndpoints.first { $0.id == id }
+    }
+    
+    // MARK: - Library Management
+    
+    /// Whether a model is in the user's library
+    func isInLibrary(_ modelId: String) -> Bool {
+        modelId == Self.appleIntelligenceId || libraryModelIds.contains(modelId)
+    }
+    
+    /// Add a model to the user's library
+    func addToLibrary(_ modelId: String) {
+        libraryModelIds.insert(modelId)
+        saveLibrary()
+    }
+    
+    /// Remove a model from the user's library (Apple Intelligence cannot be removed)
+    func removeFromLibrary(_ modelId: String) {
+        guard modelId != Self.appleIntelligenceId else { return }
+        libraryModelIds.remove(modelId)
+        saveLibrary()
+    }
+    
+    /// Toggle a model's library membership
+    func toggleLibrary(_ modelId: String) {
+        if isInLibrary(modelId) {
+            removeFromLibrary(modelId)
+        } else {
+            addToLibrary(modelId)
+        }
+    }
+    
+    /// Models currently in the user's library
+    var libraryModels: [StoreModel] {
+        allModels.filter { isInLibrary($0.id) }
+    }
+    
+    private func saveLibrary() {
+        let array = Array(libraryModelIds)
+        UserDefaults.standard.set(array, forKey: libraryModelIdsKey)
+    }
+    
+    private func loadLibrary() {
+        if let array = UserDefaults.standard.stringArray(forKey: libraryModelIdsKey) {
+            libraryModelIds = Set(array)
+        }
+        // Apple Intelligence is always in the library
+        if FoundationModelsProvider.isAppleIntelligenceAvailable {
+            libraryModelIds.insert(Self.appleIntelligenceId)
+        }
     }
     
     // MARK: - Firestore Integration

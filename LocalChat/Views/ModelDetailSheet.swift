@@ -16,6 +16,7 @@ struct ModelDetailSheet: View {
     var onStartChat: ((Chat) -> Void)?
     
     @State private var aiService = AIService.shared
+    @State private var modelStore = ModelStoreService.shared
     @State private var isModelReady = false
     @State private var showAPIKeyEntry = false
     @State private var apiKeyInput = ""
@@ -61,10 +62,20 @@ struct ModelDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    Button("Close") {
                         dismiss()
                     }
                     .foregroundStyle(AppTheme.accent)
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        modelStore.toggleLibrary(model.id)
+                    } label: {
+                        Image(systemName: modelStore.isInLibrary(model.id) ? "checkmark" : "plus")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .sensoryFeedback(.impact(flexibility: .soft), trigger: modelStore.isInLibrary(model.id))
                 }
             }
             .task {

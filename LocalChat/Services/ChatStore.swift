@@ -71,13 +71,18 @@ final class ChatStore {
     @discardableResult
     func createChat(title: String = "New Chat") -> Chat {
         let defaults = DefaultChatSettings.shared
-        
-        // Use the persisted default model ID, or fall back to the first available model
-        // We intentionally don't use aiService.currentModel here to keep new chats
-        // independent from whatever model is currently active in other chats
-        let modelId = defaults.defaultModelId 
-            ?? ModelStoreService.shared.allModels.first?.modelId 
-            ?? aiService.currentModel.modelId
+        let catalog = ModelStoreService.shared.allModels
+        let currentId = aiService.currentModel.modelId
+        // Match the composer's selection so `ChatDetailView.onAppear` does not replace a
+        // picker choice with the app default before the first `sendMessage` runs. Fresh
+        // "New Chat" screens still reset `currentModel` to the default on appear; the
+        // picker uses `setCurrentModel(..., updateDefault: false)` so defaults stay separate.
+        let modelId: String
+        if catalog.contains(where: { $0.modelId == currentId }) {
+            modelId = currentId
+        } else {
+            modelId = defaults.defaultModelId ?? catalog.first?.modelId ?? currentId
+        }
         
         let chat = Chat(
             title: title,
