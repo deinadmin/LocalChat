@@ -406,7 +406,7 @@ private var aiMessageView: some View {
         let modelStore = ModelStoreService.shared
         let aiService = AIService.shared
         var ready: [StoreModel] = []
-        for model in modelStore.allModels {
+        for model in modelStore.libraryModels {
             let isReady = await aiService.isModelReady(model)
             if isReady {
                 ready.append(model)

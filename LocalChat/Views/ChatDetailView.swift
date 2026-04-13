@@ -36,6 +36,9 @@ struct ChatDetailView: View {
     @State private var scrolledMessageID: UUID?
     @State private var tempScrolledMessageID: UUID?
     @State private var isContentReady = false
+    // Stable sentinel IDs for scrolling to the true bottom of each scroll view
+    @State private var bottomSentinelID = UUID()
+    @State private var tempBottomSentinelID = UUID()
     
     // State for "new chat" mode - shows empty state without creating a chat yet
     @State private var isNewChatMode = false
@@ -267,16 +270,26 @@ struct ChatDetailView: View {
                         } : nil
                     )
                     .id(message.id)
-                    .transition(message.isFromUser ? .asymmetric(
+                    // Only animate insertions after the initial load is complete.
+                    // During the initial hidden scroll LazyVStack lazily inserts rows;
+                    // applying move transitions then causes a feedback loop where each
+                    // animated insertion shifts the layout, triggering more insertions.
+                    .transition(isContentReady ? (message.isFromUser ? .asymmetric(
                         insertion: .move(edge: .bottom).combined(with: .opacity),
                         removal: .opacity
-                    ) : .opacity)
+                    ) : .opacity) : .identity)
                 }
+                // Transparent sentinel that represents the true content bottom.
+                // scrollPosition targets this instead of the last message so that
+                // anchor:.bottom places the sentinel's bottom (= physical screen bottom)
+                // at the viewport edge, leaving the last message fully above the input bar.
+                Color.clear
+                    .frame(height: inputBarHeight + 16)
+                    .id(bottomSentinelID)
             }
             .scrollTargetLayout()
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: chat.messages.count)
+            .animation(isContentReady ? .spring(response: 0.4, dampingFraction: 0.8) : nil, value: chat.messages.count)
             .padding(.top, 16)
-            .padding(.bottom, inputBarHeight + 16)
         }
         .scrollPosition(id: $scrolledMessageID, anchor: .bottom)
         .scrollDismissesKeyboard(.interactively)
@@ -294,10 +307,10 @@ struct ChatDetailView: View {
             }
         }
         .onAppear {
-            // Set initial scroll position to the last message (while hidden)
-            scrolledMessageID = chat.sortedMessages.last?.id
+            // Jump to the sentinel (true bottom) while the view is still hidden
+            scrolledMessageID = bottomSentinelID
             
-            // Wait for scroll to settle, then fade in
+            // Wait for the scroll to settle, then fade in
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(100))
                 withAnimation(.easeOut(duration: 0.25)) {
@@ -307,13 +320,12 @@ struct ChatDetailView: View {
         }
         .onChange(of: chat.messages.count) { oldCount, newCount in
             if isAtBottom {
-                // Scroll to the newest message
-                scrolledMessageID = chat.sortedMessages.last?.id
+                scrolledMessageID = bottomSentinelID
             }
         }
         .onChange(of: isChatGenerating) { old, new in
             if new && isAtBottom {
-                scrolledMessageID = chat.sortedMessages.last?.id
+                scrolledMessageID = bottomSentinelID
             }
         }
     }
@@ -331,11 +343,13 @@ struct ChatDetailView: View {
                             removal: .opacity
                         ) : .opacity)
                 }
+                Color.clear
+                    .frame(height: inputBarHeight + 16)
+                    .id(tempBottomSentinelID)
             }
             .scrollTargetLayout()
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: temporaryMessages.count)
             .padding(.top, 16)
-            .padding(.bottom, inputBarHeight + 16)
         }
         .scrollPosition(id: $tempScrolledMessageID, anchor: .bottom)
         .scrollDismissesKeyboard(.interactively)
@@ -354,7 +368,7 @@ struct ChatDetailView: View {
         }
         .onChange(of: temporaryMessages.count) { oldCount, newCount in
             if isAtBottom {
-                tempScrolledMessageID = temporaryMessages.last?.id
+                tempScrolledMessageID = tempBottomSentinelID
             }
         }
     }
@@ -752,10 +766,10 @@ struct ChatDetailView: View {
     private func scrollToBottom(animate: Bool = true) {
         if animate {
             withAnimation(.easeOut(duration: 0.3)) {
-                scrolledMessageID = chat.sortedMessages.last?.id
+                scrolledMessageID = bottomSentinelID
             }
         } else {
-            scrolledMessageID = chat.sortedMessages.last?.id
+            scrolledMessageID = bottomSentinelID
         }
     }
     

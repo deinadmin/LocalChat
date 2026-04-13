@@ -78,79 +78,70 @@ struct AdditionalContextSheet: View {
         self._isWebSearchEnabled = isWebSearchEnabled
     }
     
+    /// Monochrome accent for this sheet only (black in light mode, white in dark).
+    private var sheetAccent: Color {
+        colorScheme == .dark ? .white : .black
+    }
+    
+    /// Contrasting foreground on `sheetAccent` (e.g. checkmark on selection badge).
+    private var sheetOnAccent: Color {
+        colorScheme == .dark ? .black : .white
+    }
+    
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppTheme.background
-                    .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 20) {
-                        // Main action buttons section
-                        mainActionsSection
-                        
-                        // Divider
-                        Rectangle()
-                            .fill(AppTheme.divider)
-                            .frame(height: 1)
-                            .padding(.horizontal, 20)
-                        
-                        // Additional options
-                        additionalOptionsSection
+
+        VStack(spacing: 20) {
+            if !selectedPhotoAssets.isEmpty {
+                HStack {
+                    Spacer()
+                    Button("Add (\(selectedPhotoAssets.count))") {
+                        addSelectedPhotos()
                     }
-                    .padding(.vertical, 16)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(sheetAccent)
                 }
+                .padding(.horizontal, 20)
             }
-            .navigationTitle("Add Context")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundStyle(AppTheme.textSecondary)
-                }
-                
-                // Show Done button when photos are selected
-                if !selectedPhotoAssets.isEmpty {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Add (\(selectedPhotoAssets.count))") {
-                            addSelectedPhotos()
-                        }
-                        .fontWeight(.semibold)
-                    }
-                }
+            
+            // Main action buttons section
+            mainActionsSection
+
+            // Additional options
+            additionalOptionsSection
+
+            Spacer()
+        }
+        .padding(.top, 16)
+        .tint(sheetAccent)
+        .task {
+            photoLibraryService.checkStatus()
+            cameraService.checkStatus()
+            if photoLibraryService.hasAnyAccess {
+                await photoLibraryService.fetchRecentPhotos()
+                await loadThumbnails()
             }
-            .task {
-                photoLibraryService.checkStatus()
-                cameraService.checkStatus()
-                if photoLibraryService.hasAnyAccess {
-                    await photoLibraryService.fetchRecentPhotos()
-                    await loadThumbnails()
-                }
+        }
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedPhotoItems,
+            maxSelectionCount: 10,
+            matching: .images
+        )
+        .onChange(of: selectedPhotoItems) { _, items in
+            Task {
+                await processSelectedPhotos(items)
             }
-            .photosPicker(
-                isPresented: $showPhotoPicker,
-                selection: $selectedPhotoItems,
-                maxSelectionCount: 10,
-                matching: .images
-            )
-            .onChange(of: selectedPhotoItems) { _, items in
-                Task {
-                    await processSelectedPhotos(items)
-                }
-            }
-            .fileImporter(
-                isPresented: $showFilePicker,
-                allowedContentTypes: [.item],
-                allowsMultipleSelection: true
-            ) { result in
-                handleFileSelection(result)
-            }
-            .fullScreenCover(isPresented: $showCamera) {
-                CameraCaptureView { image in
-                    handleCapturedImage(image)
-                }
+        }
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            handleFileSelection(result)
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraCaptureView { image in
+                handleCapturedImage(image)
             }
         }
         .presentationDetents([.medium])
@@ -166,8 +157,8 @@ struct AdditionalContextSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 // Header with title
                 HStack {
-                    Text("Photos")
-                        .font(.system(size: 17, weight: .semibold))
+                    Text("LocalChat")
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(AppTheme.textPrimary)
                     
                     Spacer()
@@ -177,7 +168,8 @@ struct AdditionalContextSheet: View {
                     }
                     .font(.system(size: 15))
                 }
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 25)
+                .padding(.top, 10)
                 
                 // Horizontal scroll with camera button and recent photos
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -204,7 +196,9 @@ struct AdditionalContextSheet: View {
                             RecentPhotoButton(
                                 asset: asset,
                                 thumbnail: recentPhotoThumbnails[asset.localIdentifier],
-                                isSelected: selectedPhotoAssets.contains(asset.localIdentifier)
+                                isSelected: selectedPhotoAssets.contains(asset.localIdentifier),
+                                selectionAccent: sheetAccent,
+                                checkmarkColor: sheetOnAccent
                             ) {
                                 togglePhotoSelection(asset)
                             }
@@ -234,7 +228,7 @@ struct AdditionalContextSheet: View {
                 
                 bigActionButton(
                     icon: "photo.on.rectangle",
-                    title: "Photos",
+                    title: "LocalChat",
                     action: handlePhotosAction
                 )
                 
@@ -274,26 +268,6 @@ struct AdditionalContextSheet: View {
                 description: "In-depth analysis and research",
                 action: { /* Placeholder */ }
             )
-            
-            Divider()
-                .padding(.leading, 56)
-            
-            additionalOptionRow(
-                icon: "text.page.badge.magnifyingglass",
-                title: "Summarize",
-                description: "Summarize long documents",
-                action: { /* Placeholder */ }
-            )
-            
-            Divider()
-                .padding(.leading, 56)
-            
-            additionalOptionRow(
-                icon: "translate",
-                title: "Translate",
-                description: "Translate text between languages",
-                action: { /* Placeholder */ }
-            )
         }
         .padding(.horizontal, 20)
     }
@@ -305,7 +279,7 @@ struct AdditionalContextSheet: View {
         HStack(spacing: 16) {
             Image(systemName: "globe")
                 .font(.system(size: 20))
-                .foregroundStyle(isWebSearchEnabled ? Color.accentColor : AppTheme.textSecondary)
+                .foregroundStyle(isWebSearchEnabled ? sheetAccent : AppTheme.textSecondary)
                 .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
@@ -319,12 +293,10 @@ struct AdditionalContextSheet: View {
             }
             
             Spacer()
-            
-            Toggle("", isOn: $isWebSearchEnabled)
-                .labelsHidden()
-                .onChange(of: isWebSearchEnabled) { _, newValue in
-                    onWebSearchToggled?(newValue)
-                }
+        }
+        .onTapGesture {
+            isWebSearchEnabled.toggle()
+            onWebSearchToggled?(isWebSearchEnabled)
         }
         .padding(.vertical, 12)
     }
@@ -550,6 +522,8 @@ struct RecentPhotoButton: View {
     let asset: PHAsset
     let thumbnail: UIImage?
     let isSelected: Bool
+    var selectionAccent: Color = .accentColor
+    var checkmarkColor: Color = .white
     let action: () -> Void
     
     var body: some View {
@@ -572,17 +546,17 @@ struct RecentPhotoButton: View {
                 
                 // Selection indicator
                 Circle()
-                    .stroke(isSelected ? Color.accentColor : Color.white.opacity(0.8), lineWidth: 2)
+                    .stroke(isSelected ? selectionAccent : Color.white.opacity(0.8), lineWidth: 2)
                     .background(
                         Circle()
-                            .fill(isSelected ? Color.accentColor : Color.clear)
+                            .fill(isSelected ? selectionAccent : Color.clear)
                     )
                     .frame(width: 24, height: 24)
                     .overlay {
                         if isSelected {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(checkmarkColor)
                         }
                     }
                     .padding(6)

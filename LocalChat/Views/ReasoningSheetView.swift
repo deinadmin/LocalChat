@@ -28,15 +28,15 @@ struct ReasoningSheetView: View {
                 }
                 .padding(20)
             }
-            .background(AppTheme.background)
             .navigationTitle("Reasoning")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button{
                         dismiss()
+                    }  label: {
+                        Image(systemName: "xmark")
                     }
-                    .fontWeight(.medium)
                 }
             }
         }
