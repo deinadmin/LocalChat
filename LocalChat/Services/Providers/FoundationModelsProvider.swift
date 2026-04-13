@@ -92,7 +92,7 @@ actor FoundationModelsProvider: AIProvider {
     ) async throws {
         #if canImport(FoundationModels)
         // Build the conversation prompt
-        let systemPrompt = messages.first { $0.role == .system }?.content
+        let systemPrompt = messages.first { $0.role == .system }?.content.textContent
         let conversationMessages = messages.filter { $0.role != .system }
         
         // Create the session with system prompt if available
@@ -104,13 +104,14 @@ actor FoundationModelsProvider: AIProvider {
         }
         
         // Build the prompt from conversation history
+        // Note: Foundation Models doesn't support images, so we extract text only
         var prompt = ""
         for message in conversationMessages {
             switch message.role {
             case .user:
-                prompt += "User: \(message.content)\n"
+                prompt += "User: \(message.content.textContent)\n"
             case .assistant:
-                prompt += "Assistant: \(message.content)\n"
+                prompt += "Assistant: \(message.content.textContent)\n"
             case .system:
                 break
             }

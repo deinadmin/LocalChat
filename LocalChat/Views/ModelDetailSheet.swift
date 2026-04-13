@@ -131,8 +131,17 @@ struct ModelDetailSheet: View {
                 }
                 
                 HStack(spacing: 4) {
-                    Image(systemName: model.providerType.iconName)
-                        .font(.system(size: 12))
+                    if model.providerType.isSystemIcon {
+                        Image(systemName: model.providerType.iconName)
+                            .font(.system(size: 12))
+                    } else {
+                        Image(model.providerType.iconName)
+                            .renderingMode(.template)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 14, height: 14)
+                    }
                     
                     Text(model.provider)
                         .font(.system(size: 15))

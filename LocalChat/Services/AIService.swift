@@ -186,6 +186,7 @@ final class AIService {
     func streamMessage(
         messages: [ChatMessage],
         model: StoreModel? = nil,
+        webSearchEnabled: Bool = false,
         onUpdate: @escaping (StreamingUpdate) -> Void
     ) async throws {
         let targetModel = model ?? currentModel
@@ -197,15 +198,29 @@ final class AIService {
         do {
             let provider = try await getProvider(for: targetModel)
             
-            try await provider.streamMessage(
-                messages: messages,
-                model: targetModel,
-                onUpdate: { update in
-                    await MainActor.run {
-                        onUpdate(update)
+            // For OpenRouter, pass web search option
+            if let openRouterProvider = provider as? OpenRouterProvider {
+                try await openRouterProvider.streamMessage(
+                    messages: messages,
+                    model: targetModel,
+                    webSearchEnabled: webSearchEnabled,
+                    onUpdate: { update in
+                        await MainActor.run {
+                            onUpdate(update)
+                        }
                     }
-                }
-            )
+                )
+            } else {
+                try await provider.streamMessage(
+                    messages: messages,
+                    model: targetModel,
+                    onUpdate: { update in
+                        await MainActor.run {
+                            onUpdate(update)
+                        }
+                    }
+                )
+            }
         } catch let error as AIProviderError {
             lastError = error
             throw error

@@ -24,6 +24,8 @@ struct MessageBubbleView: View {
     @State private var availableModels: [StoreModel] = []
     @State private var regenerateTrigger = false
     @State private var deleteTrigger = false
+    @State private var selectedImageAttachment: MessageAttachment?
+    @State private var selectedFileAttachment: MessageAttachment?
     
     /// The display name for this message's model (AI messages only)
     private var messageModelName: String {
@@ -69,40 +71,69 @@ struct MessageBubbleView: View {
         .sheet(isPresented: $showSourcesSheet) {
             SourcesSheetView(citations: citations, accentColor: accentColor)
         }
+        .fullScreenCover(item: $selectedImageAttachment) { attachment in
+            FullscreenImageView(attachment: attachment)
+        }
+        .sheet(item: $selectedFileAttachment) { attachment in
+            FilePreviewSheet(attachment: attachment)
+        }
     }
     
     // MARK: - User Message (Cream bubble on right)
     
     private var userMessageView: some View {
-        HStack {
-            Spacer(minLength: 60) // Push to right, leave at least 60pt on left
+        VStack(alignment: .trailing, spacing: 8) {
+            // Show attachments if any (right-aligned, no context menu)
+            if message.hasAttachments {
+                userAttachmentsView
+            }
             
-            Text(message.content)
-                .font(.system(size: 16))
-                .foregroundStyle(AppTheme.textPrimary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(AppTheme.cardBackground)
+            // Only show text bubble if there's content (with context menu)
+            if !message.content.isEmpty {
+                HStack {
+                    Spacer(minLength: 60)
+                    Text(message.content)
+                        .font(.system(size: 16))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .fill(AppTheme.cardBackground)
+                        }
+                        .contextMenu {
+                            // Only show edit if message has no attachments
+                            if onEdit != nil && !message.hasAttachments {
+                                Button {
+                                    onEdit?()
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                            }
+                            
+                            if onDelete != nil {
+                                Button(role: .destructive) {
+                                    showUserDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
                 }
-                .contextMenu {
-                    if onEdit != nil {
-                        Button {
-                            onEdit?()
-                        } label: {
-                            Label("Edit", systemImage: "pencil")
+            } else if message.hasAttachments {
+                // If only attachments (no text), show a minimal delete context menu on the attachment area
+                Color.clear
+                    .frame(height: 1)
+                    .contextMenu {
+                        if onDelete != nil {
+                            Button(role: .destructive) {
+                                showUserDeleteConfirmation = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
-                    
-                    if onDelete != nil {
-                        Button(role: .destructive) {
-                            showUserDeleteConfirmation = true
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                }
+            }
         }
         .padding(.horizontal, horizontalPadding)
         .alert("Delete Message", isPresented: $showUserDeleteConfirmation) {
@@ -117,10 +148,85 @@ struct MessageBubbleView: View {
         .sensoryFeedback(.warning, trigger: deleteTrigger)
     }
     
+    // MARK: - User Attachments View
+    
+    private var userAttachmentsView: some View {
+        HStack {
+            Spacer(minLength: 60)
+            VStack(alignment: .trailing, spacing: 8) {
+                ForEach(message.attachments) { attachment in
+                    attachmentThumbnail(for: attachment)
+                        .onTapGesture {
+                            if attachment.type == .image {
+                                selectedImageAttachment = attachment
+                            } else {
+                                selectedFileAttachment = attachment
+                            }
+                        }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func attachmentThumbnail(for attachment: MessageAttachment) -> some View {
+        if attachment.type == .image, let imageData = Data(base64Encoded: attachment.base64Data) {
+            #if os(iOS)
+            if let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            #else
+            if let nsImage = NSImage(data: imageData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 80, height: 80)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            #endif
+        } else {
+            // File attachment chip
+            HStack(spacing: 6) {
+                Image(systemName: iconForMimeType(attachment.mimeType))
+                    .font(.system(size: 14))
+                    .foregroundStyle(AppTheme.textSecondary)
+                Text(attachment.filename)
+                    .font(.system(size: 13))
+                    .foregroundStyle(AppTheme.textPrimary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.cardBackground)
+            }
+        }
+    }
+    
+    private func iconForMimeType(_ mimeType: String) -> String {
+        if mimeType.hasPrefix("image/") { return "photo" }
+        if mimeType.hasPrefix("video/") { return "video" }
+        if mimeType.hasPrefix("audio/") { return "waveform" }
+        if mimeType.contains("pdf") { return "doc.fill" }
+        if mimeType.contains("text") { return "doc.text" }
+        return "doc"
+    }
+    
 // MARK: - AI Message (Full-width markdown)
 
 private var aiMessageView: some View {
     VStack(alignment: .leading, spacing: 8) {
+        // Show web search indicator if searching or has searched
+        if message.isSearchingWeb || message.didSearchWeb {
+            WebSearchIndicatorView(isSearching: message.isSearchingWeb)
+                .padding(.horizontal, horizontalPadding)
+        }
+        
         // Show thinking indicator if model is reasoning or has reasoning content
         if message.isThinking || message.hasReasoningContent {
             ThinkingIndicatorView(
@@ -136,8 +242,8 @@ private var aiMessageView: some View {
             .padding(.horizontal, horizontalPadding)
         }
         
-        if message.isStreaming && message.content.isEmpty && !message.isThinking {
-            // Only show typing indicator if not in thinking mode
+        if message.isStreaming && message.content.isEmpty && !message.isThinking && !message.isSearchingWeb {
+            // Only show typing indicator if not in thinking mode or web search mode
             typingIndicator
                 .padding(.horizontal, horizontalPadding)
         } else if !message.content.isEmpty {
@@ -453,4 +559,282 @@ private var aiMessageView: some View {
         .padding()
     }
     .background(AppTheme.background)
+}
+
+// MARK: - Fullscreen Image View
+
+struct FullscreenImageView: View {
+    let attachment: MessageAttachment
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let imageData = Data(base64Encoded: attachment.base64Data) {
+                #if os(iOS)
+                if let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .scaleEffect(scale)
+                        .gesture(
+                            MagnifyGesture()
+                                .onChanged { value in
+                                    scale = lastScale * value.magnification
+                                }
+                                .onEnded { _ in
+                                    lastScale = scale
+                                    if scale < 1.0 {
+                                        withAnimation(.spring(response: 0.3)) {
+                                            scale = 1.0
+                                            lastScale = 1.0
+                                        }
+                                    }
+                                }
+                        )
+                        .onTapGesture(count: 2) {
+                            withAnimation(.spring(response: 0.3)) {
+                                if scale > 1.0 {
+                                    scale = 1.0
+                                    lastScale = 1.0
+                                } else {
+                                    scale = 2.0
+                                    lastScale = 2.0
+                                }
+                            }
+                        }
+                }
+                #else
+                if let nsImage = NSImage(data: imageData) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                }
+                #endif
+            }
+            
+            // Close button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .shadow(radius: 4)
+                    }
+                    .padding()
+                }
+                Spacer()
+            }
+        }
+        .statusBarHidden(true)
+    }
+}
+
+// MARK: - File Preview Sheet
+
+struct FilePreviewSheet: View {
+    let attachment: MessageAttachment
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let data = attachment.data {
+                    FilePreviewContent(data: data, filename: attachment.filename, mimeType: attachment.mimeType)
+                        .ignoresSafeArea(edges: .bottom)
+                } else {
+                    ContentUnavailableView(
+                        "Unable to Preview",
+                        systemImage: "doc.questionmark",
+                        description: Text("The file data could not be loaded.")
+                    )
+                }
+            }
+            .navigationTitle(attachment.filename)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - File Preview Content
+
+struct FilePreviewContent: View {
+    let data: Data
+    let filename: String
+    let mimeType: String
+    
+    var body: some View {
+        let lowercaseMime = mimeType.lowercased()
+        let lowercaseFilename = filename.lowercased()
+        
+        if lowercaseMime.contains("pdf") || lowercaseFilename.hasSuffix(".pdf") {
+            // PDF preview using PDFKit
+            PDFPreviewView(data: data)
+                .ignoresSafeArea(edges: .bottom)
+        } else if isTextFile {
+            // Text file preview
+            TextFilePreview(data: data, filename: filename)
+        } else {
+            // Generic file - show info
+            GenericFilePreview(filename: filename, mimeType: mimeType, dataSize: data.count)
+        }
+    }
+    
+    private var isTextFile: Bool {
+        let lowercaseMime = mimeType.lowercased()
+        let lowercaseFilename = filename.lowercased()
+        
+        if lowercaseMime.hasPrefix("text/") { return true }
+        if lowercaseMime.contains("json") || lowercaseMime.contains("xml") { return true }
+        
+        let textExtensions = [".txt", ".md", ".json", ".xml", ".html", ".css", ".js", ".ts",
+                              ".swift", ".py", ".rb", ".java", ".c", ".cpp", ".h", ".m",
+                              ".sh", ".yaml", ".yml", ".toml", ".ini", ".csv", ".log", ".sql"]
+        return textExtensions.contains { lowercaseFilename.hasSuffix($0) }
+    }
+}
+
+// MARK: - PDF Preview
+
+#if canImport(PDFKit)
+import PDFKit
+
+struct PDFPreviewView: View {
+    let data: Data
+    
+    var body: some View {
+        PDFKitView(data: data)
+    }
+}
+
+#if os(iOS)
+struct PDFKitView: UIViewRepresentable {
+    let data: Data
+    
+    func makeUIView(context: Context) -> PDFView {
+        let pdfView = PDFView()
+        pdfView.autoScales = true
+        pdfView.document = PDFDocument(data: data)
+        return pdfView
+    }
+    
+    func updateUIView(_ uiView: PDFView, context: Context) {}
+}
+#else
+struct PDFKitView: NSViewRepresentable {
+    let data: Data
+    
+    func makeNSView(context: Context) -> PDFView {
+        let pdfView = PDFView()
+        pdfView.autoScales = true
+        pdfView.document = PDFDocument(data: data)
+        return pdfView
+    }
+    
+    func updateNSView(_ nsView: PDFView, context: Context) {}
+}
+#endif
+#else
+struct PDFPreviewView: View {
+    let data: Data
+    
+    var body: some View {
+        ContentUnavailableView(
+            "PDF Preview Unavailable",
+            systemImage: "doc.fill",
+            description: Text("PDFKit is not available on this platform.")
+        )
+    }
+}
+#endif
+
+// MARK: - Text File Preview
+
+struct TextFilePreview: View {
+    let data: Data
+    let filename: String
+    
+    private var textContent: String? {
+        String(data: data, encoding: .utf8)
+    }
+    
+    var body: some View {
+        if let content = textContent {
+            ScrollView {
+                Text(content)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            ContentUnavailableView(
+                "Unable to Read File",
+                systemImage: "doc.text",
+                description: Text("The file could not be decoded as text.")
+            )
+        }
+    }
+}
+
+// MARK: - Generic File Preview
+
+struct GenericFilePreview: View {
+    let filename: String
+    let mimeType: String
+    let dataSize: Int
+    
+    private var formattedSize: String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(dataSize))
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: iconForMimeType)
+                .font(.system(size: 72))
+                .foregroundStyle(.secondary)
+            
+            VStack(spacing: 8) {
+                Text(filename)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                
+                Text(mimeType)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                
+                Text(formattedSize)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+    }
+    
+    private var iconForMimeType: String {
+        let mime = mimeType.lowercased()
+        if mime.contains("pdf") { return "doc.fill" }
+        if mime.hasPrefix("image/") { return "photo" }
+        if mime.hasPrefix("video/") { return "video" }
+        if mime.hasPrefix("audio/") { return "waveform" }
+        if mime.hasPrefix("text/") { return "doc.text" }
+        if mime.contains("zip") || mime.contains("archive") { return "archivebox" }
+        return "doc"
+    }
 }

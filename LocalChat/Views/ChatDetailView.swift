@@ -17,7 +17,6 @@ struct ChatDetailView: View {
     @State private var messageText = ""
     @State private var showModelPicker = false
     @State private var showChatSettings = false
-    @State private var scrollProxy: ScrollViewProxy?
     @State private var aiService = AIService.shared
     @FocusState private var isInputFocused: Bool
     
@@ -34,6 +33,9 @@ struct ChatDetailView: View {
     
     @State private var isAtBottom = true
     @State private var showScrollToBottom = false
+    @State private var scrolledMessageID: UUID?
+    @State private var tempScrolledMessageID: UUID?
+    @State private var isContentReady = false
     
     // State for "new chat" mode - shows empty state without creating a chat yet
     @State private var isNewChatMode = false
@@ -43,6 +45,13 @@ struct ChatDetailView: View {
     @State private var temporaryMessages: [Message] = []
     // Track if we're generating a response for temporary chat
     @State private var isGeneratingTemporary = false
+    
+    // Additional context sheet
+    @State private var showAdditionalContextSheet = false
+    @State private var pendingAttachments: [ChatAttachment] = []
+    
+    // Web search toggle state
+    @State private var isWebSearchEnabled = false
     
     /// Check if this specific chat is currently generating
     private var isChatGenerating: Bool {
@@ -69,7 +78,18 @@ struct ChatDetailView: View {
             } else if isNewChatMode && isTemporaryChat {
                 temporaryMessagesScrollView
             } else {
-                messagesScrollView
+                ZStack {
+                    // Loading spinner - shown while content prepares
+                    if !isContentReady {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    
+                    // Messages - hidden until ready, then fades in
+                    messagesScrollView
+                        .opacity(isContentReady ? 1 : 0)
+                }
             }
             
             // Floating scroll to bottom button
@@ -154,11 +174,26 @@ struct ChatDetailView: View {
         .sheet(isPresented: $showChatSettings) {
             ChatSettingsSheet(chat: chat)
         }
+        .sheet(isPresented: $showAdditionalContextSheet) {
+            AdditionalContextSheet(
+                isWebSearchEnabled: $isWebSearchEnabled,
+                onWebSearchToggled: { enabled in
+                    isWebSearchEnabled = enabled
+                },
+                onAttachmentsSelected: { attachments in
+                    pendingAttachments = attachments
+                }
+            )
+        }
         .onAppear {
             // Switch to the chat's last used model if available
             if let lastModelId = chat.lastModelId {
                 chatStore.switchToModel(withId: lastModelId)
             }
+        }
+        .onChange(of: chat.id) { oldId, newId in
+            // Reset content ready state when switching chats
+            isContentReady = false
         }
     }
     
@@ -215,84 +250,70 @@ struct ChatDetailView: View {
     // MARK: - Messages Scroll View
     
     private var messagesScrollView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ForEach(chat.sortedMessages) { message in
-                        MessageBubbleView(
-                            message: message,
-                            accentColor: selectedModel.accentColor,
-                            onRegenerateWith: !message.isFromUser ? { model in
-                                regenerateMessage(message, with: model)
-                            } : nil,
-                            onDelete: {
-                                deleteMessage(message)
-                            },
-                            onEdit: message.isFromUser ? {
-                                startEditing(message)
-                            } : nil
-                        )
-                        .id(message.id)
-                        .transition(message.isFromUser ? .asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .opacity
-                        ) : .opacity)
-                    }
-                }
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: chat.messages.count)
-                .padding(.top, 16)
-                .padding(.bottom, inputBarHeight + 16) // Extra padding for input bar overlay
-                
-                // Invisible bottom anchor - AFTER the padding so scrolling here reaches true bottom
-                Color.clear
-                    .frame(height: 1)
-                    .id("bottom")
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                // Calculate distance from bottom of content
-                // contentOffset.y + containerSize.height = how far down we've scrolled + visible area
-                // contentSize.height = total scrollable content
-                let visibleBottom = geo.contentOffset.y + geo.containerSize.height
-                let distanceFromBottom = geo.contentSize.height - visibleBottom
-                return distanceFromBottom
-            } action: { oldDistance, distanceFromBottom in
-                // We're at bottom if within 100pt of the bottom
-                let isAtBottomNow = distanceFromBottom < 120
-                if isAtBottom != isAtBottomNow {
-                    isAtBottom = isAtBottomNow
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        showScrollToBottom = !isAtBottomNow
-                    }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(chat.sortedMessages) { message in
+                    MessageBubbleView(
+                        message: message,
+                        accentColor: selectedModel.accentColor,
+                        onRegenerateWith: !message.isFromUser ? { model in
+                            regenerateMessage(message, with: model)
+                        } : nil,
+                        onDelete: {
+                            deleteMessage(message)
+                        },
+                        onEdit: message.isFromUser ? {
+                            startEditing(message)
+                        } : nil
+                    )
+                    .id(message.id)
+                    .transition(message.isFromUser ? .asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .opacity
+                    ) : .opacity)
                 }
             }
-            .task {
-                // Store proxy for later use
-                scrollProxy = proxy
-                // Wait for layout to fully complete, then scroll to bottom
-                // Use multiple attempts to ensure scroll succeeds after layout
-                try? await Task.sleep(for: .milliseconds(50))
-                scrollToBottom(animate: false)
-                try? await Task.sleep(for: .milliseconds(150))
-                scrollToBottom(animate: false)
-            }
-            .onChange(of: chat.messages.count) { oldCount, newCount in
-                // Auto-scroll if we're already at the bottom
-                if isAtBottom {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(50))
-                        scrollToBottom()
-                    }
+            .scrollTargetLayout()
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: chat.messages.count)
+            .padding(.top, 16)
+            .padding(.bottom, inputBarHeight + 16)
+        }
+        .scrollPosition(id: $scrolledMessageID, anchor: .bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            let visibleBottom = geo.contentOffset.y + geo.containerSize.height
+            let distanceFromBottom = geo.contentSize.height - visibleBottom
+            return distanceFromBottom
+        } action: { oldDistance, distanceFromBottom in
+            let isAtBottomNow = distanceFromBottom < 120
+            if isAtBottom != isAtBottomNow {
+                isAtBottom = isAtBottomNow
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showScrollToBottom = !isAtBottomNow
                 }
             }
-            .onChange(of: isChatGenerating) { old, new in
-                // Scroll when generation starts if we're at bottom
-                if new && isAtBottom {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(50))
-                        scrollToBottom()
-                    }
+        }
+        .onAppear {
+            // Set initial scroll position to the last message (while hidden)
+            scrolledMessageID = chat.sortedMessages.last?.id
+            
+            // Wait for scroll to settle, then fade in
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(100))
+                withAnimation(.easeOut(duration: 0.25)) {
+                    isContentReady = true
                 }
+            }
+        }
+        .onChange(of: chat.messages.count) { oldCount, newCount in
+            if isAtBottom {
+                // Scroll to the newest message
+                scrolledMessageID = chat.sortedMessages.last?.id
+            }
+        }
+        .onChange(of: isChatGenerating) { old, new in
+            if new && isAtBottom {
+                scrolledMessageID = chat.sortedMessages.last?.id
             }
         }
     }
@@ -300,50 +321,40 @@ struct ChatDetailView: View {
     // MARK: - Temporary Messages Scroll View (in-memory only)
     
     private var temporaryMessagesScrollView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    ForEach(temporaryMessages) { message in
-                        MessageBubbleView(message: message, accentColor: selectedModel.accentColor)
-                            .id(message.id)
-                            .transition(message.isFromUser ? .asymmetric(
-                                insertion: .move(edge: .bottom).combined(with: .opacity),
-                                removal: .opacity
-                            ) : .opacity)
-                    }
-                }
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: temporaryMessages.count)
-                .padding(.top, 16)
-                .padding(.bottom, inputBarHeight + 16)
-                
-                Color.clear
-                    .frame(height: 1)
-                    .id("bottom")
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onScrollGeometryChange(for: CGFloat.self) { geo in
-                let visibleBottom = geo.contentOffset.y + geo.containerSize.height
-                let distanceFromBottom = geo.contentSize.height - visibleBottom
-                return distanceFromBottom
-            } action: { oldDistance, distanceFromBottom in
-                let isAtBottomNow = distanceFromBottom < 120
-                if isAtBottom != isAtBottomNow {
-                    isAtBottom = isAtBottomNow
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                        showScrollToBottom = !isAtBottomNow
-                    }
+        ScrollView {
+            LazyVStack(spacing: 16) {
+                ForEach(temporaryMessages) { message in
+                    MessageBubbleView(message: message, accentColor: selectedModel.accentColor)
+                        .id(message.id)
+                        .transition(message.isFromUser ? .asymmetric(
+                            insertion: .move(edge: .bottom).combined(with: .opacity),
+                            removal: .opacity
+                        ) : .opacity)
                 }
             }
-            .task {
-                scrollProxy = proxy
-            }
-            .onChange(of: temporaryMessages.count) { oldCount, newCount in
-                if isAtBottom {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(50))
-                        scrollToBottom()
-                    }
+            .scrollTargetLayout()
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: temporaryMessages.count)
+            .padding(.top, 16)
+            .padding(.bottom, inputBarHeight + 16)
+        }
+        .scrollPosition(id: $tempScrolledMessageID, anchor: .bottom)
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollGeometryChange(for: CGFloat.self) { geo in
+            let visibleBottom = geo.contentOffset.y + geo.containerSize.height
+            let distanceFromBottom = geo.contentSize.height - visibleBottom
+            return distanceFromBottom
+        } action: { oldDistance, distanceFromBottom in
+            let isAtBottomNow = distanceFromBottom < 120
+            if isAtBottom != isAtBottomNow {
+                isAtBottom = isAtBottomNow
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showScrollToBottom = !isAtBottomNow
                 }
+            }
+        }
+        .onChange(of: temporaryMessages.count) { oldCount, newCount in
+            if isAtBottom {
+                tempScrolledMessageID = temporaryMessages.last?.id
             }
         }
     }
@@ -400,6 +411,28 @@ struct ChatDetailView: View {
                     ))
                 }
                 
+                // Pending attachments preview
+                if !pendingAttachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(pendingAttachments) { attachment in
+                                AttachmentPreviewChip(
+                                    attachment: attachment,
+                                    onRemove: {
+                                        withAnimation {
+                                            pendingAttachments.removeAll { $0.id == attachment.id }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                }
+                
                 TextField(isEditing ? "Edit your message" : (isEmptyState ? "Chat with AI" : "Reply to AI"), text: $messageText, axis: .vertical)
                     .font(.system(size: 16))
                     .foregroundStyle(AppTheme.textPrimary)
@@ -416,7 +449,7 @@ struct ChatDetailView: View {
                 HStack(spacing: 10) {
                     // Plus button (attachments)
                     Button {
-                        // Attachments action
+                        showAdditionalContextSheet = true
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
@@ -443,6 +476,26 @@ struct ChatDetailView: View {
                         .background(Capsule().fill(Color.gray.opacity(0.3)))
                     }
                     .buttonStyle(ScalableButtonStyle())
+                    
+                    // Web search indicator chip (shows when enabled)
+                    if isWebSearchEnabled {
+                        Button {
+                            showAdditionalContextSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12, weight: .medium))
+                                Text("Web")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundStyle(Color.accentColor)
+                            .padding(.horizontal, 10)
+                            .frame(height: buttonSize)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.15)))
+                        }
+                        .buttonStyle(ScalableButtonStyle())
+                        .transition(.scale.combined(with: .opacity))
+                    }
                     
                     Spacer()
                     
@@ -538,10 +591,13 @@ struct ChatDetailView: View {
     
     private var canSend: Bool {
         let hasText = !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasAttachments = !pendingAttachments.isEmpty
+        let hasContent = hasText || hasAttachments
+        
         if isNewChatMode && isTemporaryChat {
-            return hasText && !isGeneratingTemporary
+            return hasContent && !isGeneratingTemporary
         }
-        return hasText && !isChatGenerating
+        return hasContent && !isChatGenerating
     }
     
     private func sendMessage() {
@@ -559,14 +615,21 @@ struct ChatDetailView: View {
         }
         
         let content = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+        let attachments = pendingAttachments
+        let webSearchEnabled = isWebSearchEnabled
+        
+        // Need either text or attachments
+        guard !content.isEmpty || !attachments.isEmpty else { return }
         
         messageText = ""
+        pendingAttachments = []
         isInputFocused = false
+        // Reset web search after sending (one-shot per request)
+        isWebSearchEnabled = false
         
         // Handle temporary chat - all in memory, no persistence
         if isNewChatMode && isTemporaryChat {
-            sendTemporaryMessage(content: content)
+            sendTemporaryMessage(content: content, webSearchEnabled: webSearchEnabled)
             return
         }
         
@@ -582,15 +645,15 @@ struct ChatDetailView: View {
             navigationPath.removeLast()
             navigationPath.append(newChat)
             
-            // Send message to the new chat
+            // Send message to the new chat with attachments
             Task {
                 try? await Task.sleep(for: .milliseconds(100))
-                await chatStore.sendMessage(content: content, to: newChat)
+                await chatStore.sendMessage(content: content, to: newChat, attachments: attachments, webSearchEnabled: webSearchEnabled)
             }
         } else {
-            // Normal send to current chat
+            // Normal send to current chat with attachments
             Task {
-                await chatStore.sendMessage(content: content, to: chat)
+                await chatStore.sendMessage(content: content, to: chat, attachments: attachments, webSearchEnabled: webSearchEnabled)
                 await MainActor.run {
                     scrollToBottom()
                 }
@@ -599,13 +662,19 @@ struct ChatDetailView: View {
     }
     
     /// Send a message in temporary chat mode - everything stays in memory
-    private func sendTemporaryMessage(content: String) {
+    private func sendTemporaryMessage(content: String, webSearchEnabled: Bool = false) {
         // Create user message (in memory only)
         let userMessage = Message(content: content, isFromUser: true)
         temporaryMessages.append(userMessage)
         
         // Create AI response placeholder
-        let aiMessage = Message(content: "", isFromUser: false, isStreaming: true)
+        let aiMessage = Message(
+            content: "",
+            isFromUser: false,
+            isStreaming: true,
+            isSearchingWeb: webSearchEnabled,
+            didSearchWeb: webSearchEnabled
+        )
         temporaryMessages.append(aiMessage)
         
         isGeneratingTemporary = true
@@ -632,15 +701,17 @@ struct ChatDetailView: View {
                 
                 try await aiService.streamMessage(
                     messages: conversationMessages,
-                    model: selectedModel
+                    model: selectedModel,
+                    webSearchEnabled: webSearchEnabled
                 ) { [self] update in
                     // Find and update the AI message (callback is already on MainActor)
                     if let index = temporaryMessages.lastIndex(where: { !$0.isFromUser }) {
                         temporaryMessages[index].content = update.content
                         temporaryMessages[index].reasoningContent = update.reasoning
                         temporaryMessages[index].isThinking = update.isReasoning
+                        temporaryMessages[index].isSearchingWeb = update.isSearchingWeb
                     }
-                    // Track citations from Perplexity
+                    // Track citations from web search or Perplexity
                     if let citations = update.citations {
                         latestCitations = citations
                     }
@@ -650,6 +721,7 @@ struct ChatDetailView: View {
                 if let index = temporaryMessages.lastIndex(where: { !$0.isFromUser }) {
                     temporaryMessages[index].isStreaming = false
                     temporaryMessages[index].isThinking = false
+                    temporaryMessages[index].isSearchingWeb = false
                     // Store citations if present
                     if let citations = latestCitations, !citations.isEmpty {
                         if let jsonData = try? JSONEncoder().encode(citations),
@@ -680,10 +752,10 @@ struct ChatDetailView: View {
     private func scrollToBottom(animate: Bool = true) {
         if animate {
             withAnimation(.easeOut(duration: 0.3)) {
-                scrollProxy?.scrollTo("bottom", anchor: .bottom)
+                scrolledMessageID = chat.sortedMessages.last?.id
             }
         } else {
-            scrollProxy?.scrollTo("bottom", anchor: .bottom)
+            scrolledMessageID = chat.sortedMessages.last?.id
         }
     }
     
@@ -746,6 +818,76 @@ struct ScalableButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.9 : 1.0)
             .animation(.spring(response: 0.2, dampingFraction: 0.6), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Attachment Preview Chip
+
+struct AttachmentPreviewChip: View {
+    let attachment: ChatAttachment
+    let onRemove: () -> Void
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if attachment.type == .image, let image = attachment.thumbnailImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                // File attachment
+                VStack(spacing: 4) {
+                    Image(systemName: iconForFile(attachment.filename))
+                        .font(.system(size: 20))
+                        .foregroundStyle(AppTheme.textSecondary)
+                    
+                    Text(attachment.filename)
+                        .font(.system(size: 9))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(width: 60, height: 60)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(AppTheme.cardBackground)
+                )
+            }
+            
+            // Remove button
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.black.opacity(0.7))
+            }
+            .offset(x: 8, y: -8)
+        }
+        .padding(.top, 8) // Prevent clipping of X button
+        .padding(.trailing, 8) // Prevent clipping of X button
+    }
+    
+    private func iconForFile(_ filename: String) -> String {
+        let ext = (filename as NSString).pathExtension.lowercased()
+        switch ext {
+        case "pdf":
+            return "doc.fill"
+        case "doc", "docx":
+            return "doc.text.fill"
+        case "xls", "xlsx":
+            return "tablecells.fill"
+        case "txt", "md":
+            return "text.alignleft"
+        case "zip", "rar", "7z":
+            return "doc.zipper"
+        case "mp3", "wav", "m4a":
+            return "waveform"
+        case "mp4", "mov", "avi":
+            return "play.rectangle.fill"
+        default:
+            return "doc.fill"
+        }
     }
 }
 

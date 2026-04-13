@@ -224,10 +224,21 @@ struct SettingsView: View {
             selectedProvider = provider
         } label: {
             HStack {
-                Image(systemName: provider.iconName)
-                    .font(.system(size: 18))
-                    .foregroundStyle(AppTheme.textSecondary)
-                    .frame(width: 24)
+                if provider.isSystemIcon {
+                    Image(systemName: provider.iconName)
+                        .font(.system(size: 18))
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(width: 24)
+                } else {
+                    Image(provider.iconName)
+                        .renderingMode(.template)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                        .foregroundStyle(AppTheme.textSecondary)
+                        .frame(width: 24)
+                }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(provider.displayName)
@@ -430,12 +441,17 @@ struct APIKeyEntrySheet: View {
     @State private var isValidating = false
     @State private var validationError: String?
     @State private var aiService = AIService.shared
+    @State private var hasExistingKey = false
+    @FocusState private var isInputFocused: Bool
     
     var body: some View {
         NavigationStack {
             ZStack {
                 AppTheme.background
                     .ignoresSafeArea()
+                    .onTapGesture {
+                        isInputFocused = false
+                    }
                 
                 VStack(spacing: 24) {
                     // Header
@@ -445,9 +461,19 @@ struct APIKeyEntrySheet: View {
                                 .fill(AppTheme.cardBackground)
                                 .frame(width: 80, height: 80)
                             
-                            Image(systemName: provider.iconName)
-                                .font(.system(size: 36))
-                                .foregroundStyle(AppTheme.accent)
+                            if provider.isSystemIcon {
+                                Image(systemName: provider.iconName)
+                                    .font(.system(size: 36))
+                                    .foregroundStyle(AppTheme.accent)
+                            } else {
+                                Image(provider.iconName)
+                                    .renderingMode(.template)
+                                    .resizable()
+                                    .interpolation(.high)
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 40, height: 40)
+                                    .foregroundStyle(AppTheme.accent)
+                            }
                         }
                         
                         Text(provider.displayName)
@@ -472,8 +498,9 @@ struct APIKeyEntrySheet: View {
                                 .font(.system(size: 16))
                                 .foregroundStyle(AppTheme.textSecondary)
                             
-                            SecureField("sk-or-...", text: $apiKey)
+                            SecureField(hasExistingKey ? "ALREADY CONFIGURED" : "sk-xx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", text: $apiKey)
                                 .font(.system(size: 16))
+                                .focused($isInputFocused)
                         }
                         .padding(14)
                         .background {
@@ -489,50 +516,99 @@ struct APIKeyEntrySheet: View {
                     }
                     .padding(.horizontal, 20)
                     
-                    // Help text
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("How to get an API key:")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(AppTheme.textPrimary)
-                        
-                        Text(helpText(for: provider))
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppTheme.textSecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-                    .background {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(AppTheme.cardBackground)
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    Spacer()
-                    
-                    // Save button
-                    Button {
-                        Task {
-                            await saveAPIKey()
+                    // Help text - hidden when input is focused
+                    if !isInputFocused {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("How to get an API key:")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundStyle(AppTheme.textPrimary)
+                            
+                            Text(helpText(for: provider))
+                                .font(.system(size: 13))
+                                .foregroundStyle(AppTheme.textSecondary)
                         }
-                    } label: {
-                        HStack {
-                            if isValidating {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .tint(AppTheme.accent.contrastingTextColor)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppTheme.cardBackground)
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    
+                    Spacer(minLength: 0)
+                    
+                    // Action buttons
+                    VStack(spacing: 12) {
+                        if hasExistingKey {
+                            // Update button (white)
+                            Button {
+                                Task {
+                                    await saveAPIKey()
+                                }
+                            } label: {
+                                HStack {
+                                    if isValidating {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .tint(AppTheme.textPrimary)
+                                    }
+                                    Text(isValidating ? "Validating..." : "Update API Key")
+                                }
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(Color("grok-color").contrastingTextColor)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
                             }
-                            Text(isValidating ? "Validating..." : "Save API Key")
+                            .glassEffect(
+                                apiKey.isEmpty ? .regular.tint(.gray).interactive() : .regular.tint(Color("grok-color")).interactive(),
+                                in: RoundedRectangle(cornerRadius: 16)
+                            )
+                            .disabled(apiKey.isEmpty || isValidating)
+                            
+                            if !isInputFocused {
+                                // Remove button (red)
+                                Button {
+                                    Task {
+                                        await removeAPIKey()
+                                    }
+                                } label: {
+                                    Text("Remove API Key")
+                                        .font(.system(size: 17, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                }
+                                .glassEffect(.regular.tint(.red).interactive(), in: RoundedRectangle(cornerRadius: 16))
+                                .disabled(isValidating)
+                            }
+                        } else {
+                            // Save button (accent color)
+                            Button {
+                                Task {
+                                    await saveAPIKey()
+                                }
+                            } label: {
+                                HStack {
+                                    if isValidating {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                            .tint(AppTheme.accent.contrastingTextColor)
+                                    }
+                                    Text(isValidating ? "Validating..." : "Save API Key")
+                                }
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(AppTheme.accent.contrastingTextColor)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                            }
+                            .glassEffect(
+                                apiKey.isEmpty ? .regular.tint(.gray) : .regular.tint(AppTheme.accent),
+                                in: RoundedRectangle(cornerRadius: 16)
+                            )
+                            .disabled(apiKey.isEmpty || isValidating)
                         }
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.accent.contrastingTextColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
                     }
-                    .glassEffect(
-                        apiKey.isEmpty ? .regular.tint(.gray) : .regular.tint(AppTheme.accent),
-                        in: RoundedRectangle(cornerRadius: 16)
-                    )
-                    .disabled(apiKey.isEmpty || isValidating)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 20)
                 }
@@ -546,8 +622,10 @@ struct APIKeyEntrySheet: View {
                     .foregroundStyle(AppTheme.accent)
                 }
             }
+            .task {
+                hasExistingKey = await aiService.hasAPIKey(for: provider)
+            }
         }
-        .presentationDetents([.medium, .large])
     }
     
     private func helpText(for provider: AIProviderType) -> String {
@@ -584,6 +662,16 @@ struct APIKeyEntrySheet: View {
         }
         
         isValidating = false
+    }
+    
+    private func removeAPIKey() async {
+        do {
+            try await aiService.removeAPIKey(for: provider)
+            onSave()
+            dismiss()
+        } catch {
+            validationError = error.localizedDescription
+        }
     }
 }
 

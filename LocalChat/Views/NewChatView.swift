@@ -28,6 +28,10 @@ struct NewChatView: View {
     @State private var temporaryMessages: [Message] = []
     @State private var isGeneratingTemporary = false
     
+    // Additional context sheet
+    @State private var showAdditionalContextSheet = false
+    @State private var pendingAttachments: [ChatAttachment] = []
+    
     private var selectedModel: StoreModel {
         aiService.currentModel
     }
@@ -89,6 +93,11 @@ struct NewChatView: View {
         }
         .sheet(isPresented: $showModelPicker) {
             ModelPickerSheetV2()
+        }
+        .sheet(isPresented: $showAdditionalContextSheet) {
+            AdditionalContextSheet { attachments in
+                pendingAttachments = attachments
+            }
         }
         .onAppear {
             // Set the current model to the default model when starting a new chat
@@ -210,6 +219,28 @@ struct NewChatView: View {
     private var inputBarView: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
+                // Pending attachments preview
+                if !pendingAttachments.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(pendingAttachments) { attachment in
+                                AttachmentPreviewChip(
+                                    attachment: attachment,
+                                    onRemove: {
+                                        withAnimation {
+                                            pendingAttachments.removeAll { $0.id == attachment.id }
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .top).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                }
+                
                 TextField(isEmptyState ? "Chat with AI" : "Reply to AI", text: $messageText, axis: .vertical)
                     .font(.system(size: 16))
                     .foregroundStyle(AppTheme.textPrimary)
@@ -225,7 +256,7 @@ struct NewChatView: View {
                 HStack(spacing: 10) {
                     // Plus button (attachments)
                     Button {
-                        // Attachments action
+                        showAdditionalContextSheet = true
                     } label: {
                         Image(systemName: "plus")
                             .font(.system(size: 14, weight: .semibold))
@@ -337,16 +368,21 @@ struct NewChatView: View {
     
     private var canSend: Bool {
         let hasText = !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return hasText && !isGeneratingTemporary
+        let hasAttachments = !pendingAttachments.isEmpty
+        return (hasText || hasAttachments) && !isGeneratingTemporary
     }
     
     private func sendMessage() {
         guard !isGeneratingTemporary else { return }
         
         let content = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !content.isEmpty else { return }
+        let attachments = pendingAttachments
+        
+        // Need either text or attachments
+        guard !content.isEmpty || !attachments.isEmpty else { return }
         
         messageText = ""
+        pendingAttachments = []
         isInputFocused = false
         
         // If temporary chat mode, handle in-memory
@@ -362,10 +398,10 @@ struct NewChatView: View {
         navigationPath.removeLast()
         navigationPath.append(chat)
         
-        // Send the message after navigation
+        // Send the message after navigation with attachments
         Task {
             try? await Task.sleep(for: .milliseconds(100))
-            await chatStore.sendMessage(content: content, to: chat)
+            await chatStore.sendMessage(content: content, to: chat, attachments: attachments)
         }
     }
     

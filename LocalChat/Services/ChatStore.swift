@@ -111,15 +111,25 @@ final class ChatStore {
     
     // MARK: - Message Operations
     
-    func sendMessage(content: String, to chat: Chat) async {
+    func sendMessage(content: String, to chat: Chat, attachments: [ChatAttachment] = [], webSearchEnabled: Bool = false) async {
         // Prevent sending while this chat is already generating
         guard !isGenerating(chatId: chat.id) else { return }
         
         let chatId = chat.id
         let isFirstMessage = chat.messages.isEmpty
         
-        // Create user message
-        let userMessage = Message(content: content, isFromUser: true)
+        // Convert ChatAttachment to MessageAttachment for storage
+        let messageAttachments: [MessageAttachment] = attachments.map { attachment in
+            MessageAttachment.fromData(
+                attachment.data,
+                type: attachment.type == .image ? .image : .file,
+                filename: attachment.filename,
+                mimeType: attachment.mimeType
+            )
+        }
+        
+        // Create user message with attachments
+        let userMessage = Message(content: content, isFromUser: true, attachments: messageAttachments.isEmpty ? nil : messageAttachments)
         userMessage.chat = chat
         chat.messages.append(userMessage)
         chat.updatedAt = Date()
@@ -146,6 +156,8 @@ final class ChatStore {
             content: "",
             isFromUser: false,
             isStreaming: true,
+            isSearchingWeb: webSearchEnabled,
+            didSearchWeb: webSearchEnabled,
             modelId: currentModel.modelId,
             modelName: currentModel.name,
             modelIconName: currentModel.iconName,
@@ -177,7 +189,8 @@ final class ChatStore {
             do {
                 try await aiService.streamMessage(
                     messages: conversationMessages,
-                    model: modelToUse
+                    model: modelToUse,
+                    webSearchEnabled: webSearchEnabled
                 ) { [weak self] update in
                     Task { @MainActor [weak self] in
                         guard let self = self else { return }
@@ -191,7 +204,10 @@ final class ChatStore {
                         
                         rawContent = update.content
                         
-                        // Store citations if provided (Perplexity sends these)
+                        // Update web search state
+                        message.isSearchingWeb = update.isSearchingWeb
+                        
+                        // Store citations if provided (web search or Perplexity sends these)
                         if let citations = update.citations, !citations.isEmpty {
                             latestCitations = citations
                             message.citations = citations
@@ -264,6 +280,7 @@ final class ChatStore {
                     }
                     
                     message.isThinking = false
+                    message.isSearchingWeb = false
                     
                     if message.reasoningContent != nil,
                        let startTime = message.thinkingStartTime,
@@ -329,6 +346,7 @@ final class ChatStore {
            let message = chat.messages.first(where: { $0.id == state.messageId }) {
             message.isStreaming = false
             message.isThinking = false
+            message.isSearchingWeb = false
             
             if let startTime = message.thinkingStartTime, message.thinkingDuration == nil {
                 message.thinkingDuration = Date().timeIntervalSince(startTime)
@@ -450,7 +468,8 @@ final class ChatStore {
         let relevantMessages = messages.prefix(through: aiIndex - 1).suffix(20)
         for msg in relevantMessages {
             if msg.isFromUser {
-                conversationMessages.append(ChatMessage(role: .user, content: msg.content))
+                // Use helper to properly include attachments
+                conversationMessages.append(convertToChatMessage(msg))
             } else if !msg.content.isEmpty && !msg.isStreaming {
                 conversationMessages.append(ChatMessage(role: .assistant, content: msg.content))
             }
@@ -679,7 +698,8 @@ final class ChatStore {
             let relevantMessages = updatedMessages.prefix(through: editedIndex).suffix(20)
             for msg in relevantMessages {
                 if msg.isFromUser {
-                    conversationMessages.append(ChatMessage(role: .user, content: msg.content))
+                    // Use helper to properly include attachments
+                    conversationMessages.append(convertToChatMessage(msg))
                 } else if !msg.content.isEmpty && !msg.isStreaming {
                     conversationMessages.append(ChatMessage(role: .assistant, content: msg.content))
                 }
@@ -868,13 +888,97 @@ final class ChatStore {
         let recentMessages = chat.sortedMessages.suffix(20)
         for message in recentMessages {
             if message.isFromUser {
-                messages.append(ChatMessage(role: .user, content: message.content))
+                // Use helper to properly include attachments
+                messages.append(convertToChatMessage(message))
             } else if !message.content.isEmpty && !message.isStreaming {
                 messages.append(ChatMessage(role: .assistant, content: message.content))
             }
         }
         
         return messages
+    }
+    
+    /// Convert a single Message to ChatMessage, properly handling attachments
+    private func convertToChatMessage(_ message: Message) -> ChatMessage {
+        if message.isFromUser {
+            if message.hasAttachments {
+                var parts: [MessageContentPart] = []
+                
+                // Add user's text content first if not empty
+                if !message.content.isEmpty {
+                    parts.append(.text(message.content))
+                }
+                
+                // Add attachments
+                for attachment in message.attachments {
+                    switch attachment.type {
+                    case .image:
+                        parts.append(.imageData(base64: attachment.base64Data, mimeType: attachment.mimeType))
+                        
+                    case .file:
+                        let mimeType = attachment.mimeType.lowercased()
+                        let filename = attachment.filename.lowercased()
+                        
+                        if mimeType.contains("pdf") || filename.hasSuffix(".pdf") {
+                            parts.append(.file(filename: attachment.filename, base64: attachment.base64Data, mimeType: attachment.mimeType))
+                        } else if let textContent = extractTextFromFile(attachment) {
+                            parts.append(.text("--- File: \(attachment.filename) ---\n\(textContent)\n--- End of \(attachment.filename) ---"))
+                        } else {
+                            parts.append(.file(filename: attachment.filename, base64: attachment.base64Data, mimeType: attachment.mimeType))
+                        }
+                    }
+                }
+                
+                return ChatMessage(role: .user, parts: parts)
+            } else {
+                return ChatMessage(role: .user, content: message.content)
+            }
+        } else {
+            return ChatMessage(role: .assistant, content: message.content)
+        }
+    }
+    
+    /// Extract text content from file attachment
+    private func extractTextFromFile(_ attachment: MessageAttachment) -> String? {
+        guard let data = attachment.data else { return nil }
+        
+        let mimeType = attachment.mimeType.lowercased()
+        
+        // Text-based files
+        if mimeType.hasPrefix("text/") ||
+           mimeType.contains("json") ||
+           mimeType.contains("xml") ||
+           mimeType.contains("javascript") ||
+           mimeType.contains("css") ||
+           mimeType.contains("html") ||
+           mimeType.contains("markdown") ||
+           mimeType.contains("yaml") ||
+           mimeType.contains("csv") {
+            return String(data: data, encoding: .utf8)
+        }
+        
+        // Common code/config file extensions (check by filename if mime type doesn't help)
+        let filename = attachment.filename.lowercased()
+        let textExtensions = [".txt", ".md", ".json", ".xml", ".html", ".css", ".js", ".ts",
+                              ".swift", ".py", ".rb", ".java", ".c", ".cpp", ".h", ".m",
+                              ".sh", ".bash", ".zsh", ".yaml", ".yml", ".toml", ".ini",
+                              ".csv", ".log", ".sql", ".graphql", ".env", ".gitignore"]
+        
+        for ext in textExtensions {
+            if filename.hasSuffix(ext) {
+                return String(data: data, encoding: .utf8)
+            }
+        }
+        
+        // For application/octet-stream, try to read as text
+        if mimeType == "application/octet-stream" {
+            if let text = String(data: data, encoding: .utf8),
+               text.allSatisfy({ $0.isASCII || $0.isLetter || $0.isNumber || $0.isWhitespace || $0.isPunctuation }) {
+                return text
+            }
+        }
+        
+        return nil
     }
     
     private func saveContext() {

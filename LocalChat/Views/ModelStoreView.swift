@@ -7,13 +7,84 @@
 
 import SwiftUI
 
+// MARK: - Unified Filter Type
+
+/// Represents a filter option in the Model Store (category or provider)
+enum ModelStoreFilter: Hashable {
+    case all
+    case category(StoreModel.ModelCategory)
+    case provider(String)
+    
+    var title: String {
+        switch self {
+        case .all:
+            return "All"
+        case .category(let category):
+            return category.rawValue
+        case .provider(let provider):
+            return provider
+        }
+    }
+    
+    var iconName: String {
+        switch self {
+        case .all:
+            return "square.grid.2x2"
+        case .category(let category):
+            return category.iconName
+        case .provider(let provider):
+            switch provider {
+            case "Google": return "gemini-icon"
+            case "OpenAI": return "openai-icon"
+            case "Anthropic": return "claude-icon"
+            case "Perplexity": return "perplexity-icon"
+            default: return "cpu"
+            }
+        }
+    }
+    
+    var isSystemIcon: Bool {
+        switch self {
+        case .all, .category:
+            return true
+        case .provider:
+            return false
+        }
+    }
+    
+    var isTemplateIcon: Bool {
+        switch self {
+        case .provider(let provider):
+            return provider == "OpenAI"
+        default:
+            return false
+        }
+    }
+    
+    /// All filters in the desired order
+    static var allFilters: [ModelStoreFilter] {
+        [
+            .all,
+            .category(.flagship),
+            .category(.fast),
+            .category(.reasoning),
+            .provider("Google"),
+            .provider("OpenAI"),
+            .provider("Anthropic"),
+            .provider("Perplexity"),
+            .category(.local),
+            .category(.free)
+        ]
+    }
+}
+
 struct ModelStoreView: View {
     @Binding var showSidebar: Bool
     var onStartChat: ((Chat) -> Void)?
     
     @State private var modelStore = ModelStoreService.shared
     @State private var searchText = ""
-    @State private var selectedCategory: StoreModel.ModelCategory?
+    @State private var selectedFilter: ModelStoreFilter = .all
     @State private var showModelDetail: StoreModel?
     @State private var showAddCustomEndpoint = false
     
@@ -22,15 +93,50 @@ struct ModelStoreView: View {
     var filteredModels: [StoreModel] {
         var result = modelStore.allModels
         
-        if let category = selectedCategory {
-            result = result.filter { $0.category == category }
+        switch selectedFilter {
+        case .all:
+            break // No filtering
+            
+        case .category(let category):
+            if category == .free {
+                // Free category: Apple Intelligence + models with "(free)" in name or $0 pricing
+                result = result.filter { model in
+                    model.provider.lowercased() == "apple" ||
+                    model.name.lowercased().contains("(free)") ||
+                    ((model.inputPricePerMillion ?? 1) == 0 && (model.outputPricePerMillion ?? 1) == 0)
+                }
+            } else {
+                result = result.filter { $0.category == category }
+            }
+            
+        case .provider(let provider):
+            result = result.filter { $0.provider == provider }
         }
         
+        // Filter by search text
         if !searchText.isEmpty {
-            result = modelStore.searchModels(searchText)
+            let searchQuery = searchText.lowercased()
+            result = result.filter { model in
+                model.name.lowercased().contains(searchQuery) ||
+                model.description.lowercased().contains(searchQuery) ||
+                model.provider.lowercased().contains(searchQuery) ||
+                model.tags.contains { $0.lowercased().contains(searchQuery) }
+            }
         }
         
         return result
+    }
+    
+    /// Title for the current filter
+    private var filterTitle: String {
+        switch selectedFilter {
+        case .all:
+            return "All Models"
+        case .category(let category):
+            return category.rawValue
+        case .provider(let provider):
+            return provider
+        }
     }
     
     var body: some View {
@@ -41,12 +147,12 @@ struct ModelStoreView: View {
             ScrollView {
                 LazyVStack(spacing: 24) {
                     // Featured models section
-                    if searchText.isEmpty && selectedCategory == nil && !modelStore.featuredModels.isEmpty {
+                    if searchText.isEmpty && selectedFilter == .all && !modelStore.featuredModels.isEmpty {
                         featuredSection
                     }
                     
-                    // Category pills
-                    categoryPills
+                    // Filter pills (categories + providers)
+                    filterPills
                     
                     // Models grid
                     modelsGrid
@@ -93,9 +199,8 @@ struct ModelStoreView: View {
             AddModelSheet()
         }
         .task {
-            if modelStore.models.isEmpty {
-                await modelStore.fetchModels()
-            }
+            // Always fetch models when the view appears to ensure OpenRouter models are loaded
+            await modelStore.fetchModels()
         }
     }
     
@@ -127,32 +232,20 @@ struct ModelStoreView: View {
         .scrollClipDisabled()
     }
     
-    // MARK: - Category Pills
+    // MARK: - Filter Pills
     
-    private var categoryPills: some View {
+    private var filterPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             GlassEffectContainer(spacing: 8) {
                 HStack(spacing: 10) {
-                    CategoryPill(
-                        title: "All",
-                        iconName: "square.grid.2x2",
-                        isSelected: selectedCategory == nil,
-                        namespace: namespace
-                    ) {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                            selectedCategory = nil
-                        }
-                    }
-                    
-                    ForEach(StoreModel.ModelCategory.allCases, id: \.self) { category in
-                        CategoryPill(
-                            title: category.rawValue,
-                            iconName: category.iconName,
-                            isSelected: selectedCategory == category,
+                    ForEach(ModelStoreFilter.allFilters, id: \.self) { filter in
+                        FilterPill(
+                            filter: filter,
+                            isSelected: selectedFilter == filter,
                             namespace: namespace
                         ) {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                selectedCategory = category
+                                selectedFilter = filter
                             }
                         }
                     }
@@ -168,7 +261,7 @@ struct ModelStoreView: View {
     private var modelsGrid: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(selectedCategory?.rawValue ?? "All Models")
+                Text(filterTitle)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(AppTheme.textPrimary)
                 
@@ -292,11 +385,10 @@ struct FeaturedModelCard: View {
     }
 }
 
-// MARK: - Category Pill
+// MARK: - Filter Pill
 
-struct CategoryPill: View {
-    let title: String
-    let iconName: String
+struct FilterPill: View {
+    let filter: ModelStoreFilter
     let isSelected: Bool
     var namespace: Namespace.ID
     let action: () -> Void
@@ -306,10 +398,25 @@ struct CategoryPill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: iconName)
-                    .font(.system(size: 12, weight: .medium))
+                if filter.isSystemIcon {
+                    Image(systemName: filter.iconName)
+                        .font(.system(size: 12, weight: .medium))
+                } else if filter.isTemplateIcon {
+                    Image(filter.iconName)
+                        .renderingMode(.template)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(filter.iconName)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 14, height: 14)
+                }
                 
-                Text(title)
+                Text(filter.title)
                     .font(.system(size: 13, weight: .medium))
             }
             .foregroundStyle(isSelected ? AppTheme.accent.contrastingTextColor : AppTheme.textPrimary)
@@ -320,7 +427,7 @@ struct CategoryPill: View {
             isSelected ? .regular.tint(AppTheme.accent) : .regular,
             in: Capsule()
         )
-        .glassEffectID("category_\(title)", in: namespace)
+        .glassEffectID("filter_\(filter.title)", in: namespace)
     }
 }
 
@@ -399,9 +506,19 @@ struct ModelCardView: View {
             
             // Provider indicator
             VStack(spacing: 4) {
-                Image(systemName: model.providerType.iconName)
-                    .font(.system(size: 14))
-                    .foregroundStyle(AppTheme.textSecondary)
+                if model.providerType.isSystemIcon {
+                    Image(systemName: model.providerType.iconName)
+                        .font(.system(size: 14))
+                        .foregroundStyle(AppTheme.textSecondary)
+                } else {
+                    Image(model.providerType.iconName)
+                        .renderingMode(.template)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 16, height: 16)
+                        .foregroundStyle(AppTheme.textSecondary)
+                }
                 
                 if !model.requiresAPIKey {
                     Text("Free")

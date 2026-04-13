@@ -62,7 +62,7 @@ actor PerplexityProvider: AIProvider {
         
         let body = PerplexityRequest(
             model: model.modelId,
-            messages: messages.map { PerplexityMessage(role: $0.role.rawValue, content: $0.content) },
+            messages: messages.map { PerplexityMessage(role: $0.role.rawValue, content: $0.content.textContent) },
             stream: true,
             temperature: configuration.temperature ?? 0.2,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens
@@ -131,7 +131,7 @@ actor PerplexityProvider: AIProvider {
         
         let body = PerplexityRequest(
             model: model.modelId,
-            messages: messages.map { PerplexityMessage(role: $0.role.rawValue, content: $0.content) },
+            messages: messages.map { PerplexityMessage(role: $0.role.rawValue, content: $0.content.textContent) },
             stream: false,
             temperature: configuration.temperature ?? 0.2,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens
@@ -230,7 +230,7 @@ actor PerplexityProvider: AIProvider {
 
 // MARK: - Request/Response Types
 
-private struct PerplexityRequest: Encodable {
+private struct PerplexityRequest: Encodable, Sendable {
     let model: String
     let messages: [PerplexityMessage]
     let stream: Bool
@@ -238,29 +238,29 @@ private struct PerplexityRequest: Encodable {
     let max_tokens: Int?
 }
 
-private struct PerplexityMessage: Codable {
+private struct PerplexityMessage: Codable, Sendable {
     let role: String
     let content: String
 }
 
-private struct PerplexityResponse: Decodable {
+private struct PerplexityResponse: Decodable, Sendable {
     let choices: [PerplexityChoice]
     let citations: [String]?
 }
 
-private struct PerplexityChoice: Decodable {
+private struct PerplexityChoice: Decodable, Sendable {
     let message: PerplexityMessage
 }
 
-private struct PerplexityStreamChunk: Decodable {
+private struct PerplexityStreamChunk: Decodable, Sendable {
     let choices: [PerplexityStreamChoice]
     let citations: [String]?
 }
 
-private struct PerplexityStreamChoice: Decodable {
+private struct PerplexityStreamChoice: Decodable, Sendable {
     let delta: PerplexityDelta?
 }
 
-private struct PerplexityDelta: Decodable {
+private struct PerplexityDelta: Decodable, Sendable {
     let content: String?
 }

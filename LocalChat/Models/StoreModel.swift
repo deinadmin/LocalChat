@@ -77,18 +77,24 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
         case "nvidia":
             return Color("nvidia-color")
         case "aion labs":
-            return Color("aion-labs-color")
+            return Color("aionlabs-color")
         case "minimax":
             return Color("minimax-color")
         case "bytedance":
             return Color("bytedance-color")
         case "qwen":
             return Color("qwen-color")
+        // Colored icon providers
+        case "meta":
+            return Color("meta-color")
+        case "arcee":
+            return Color("arcee-color")
         // Black/white template icons - use grok-color which adapts to light/dark mode
-        case "openrouter", "z.ai":
+        case "openrouter", "z.ai", "moonshot", "liquid":
             return Color("grok-color")
         default:
-            return Color(hex: accentColorHex) ?? .blue
+            // Unknown providers use grok-color (monochrome that adapts to light/dark)
+            return Color("grok-color")
         }
     }
     
@@ -114,7 +120,7 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
     /// Icons that are template images (monochrome) and should use .primary foreground
     var isTemplateIcon: Bool {
         switch iconName {
-        case "openai-icon", "grok-icon", "openrouter-icon", "zai-icon":
+        case "openai-icon", "grok-icon", "openrouter-icon", "zai-icon", "moonshot-icon", "liquid-icon":
             return true
         default:
             return false
@@ -125,7 +131,7 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
     /// For these models, the button background is black in light mode and white in dark mode
     var isMonochromeAccent: Bool {
         switch provider.lowercased() {
-        case "openrouter", "z.ai", "xai":
+        case "openrouter", "z.ai", "xai", "moonshot", "liquid":
             return true
         default:
             return false
@@ -190,9 +196,6 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
         case flagship = "Flagship"
         case fast = "Fast"
         case reasoning = "Reasoning"
-        case vision = "Vision"
-        case coding = "Coding"
-        case creative = "Creative"
         case local = "On-Device"
         case free = "Free"
         
@@ -201,9 +204,6 @@ struct StoreModel: Identifiable, Codable, Hashable, Sendable {
             case .flagship: return "star.fill"
             case .fast: return "bolt.fill"
             case .reasoning: return "brain.head.profile"
-            case .vision: return "eye.fill"
-            case .coding: return "chevron.left.forwardslash.chevron.right"
-            case .creative: return "paintbrush.fill"
             case .local: return "iphone"
             case .free: return "gift.fill"
             }

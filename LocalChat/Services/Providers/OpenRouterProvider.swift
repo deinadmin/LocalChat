@@ -49,6 +49,17 @@ actor OpenRouterProvider: AIProvider {
         model: StoreModel,
         onUpdate: @escaping @Sendable (StreamingUpdate) async -> Void
     ) async throws {
+        // Default to no web search
+        try await streamMessage(messages: messages, model: model, webSearchEnabled: false, onUpdate: onUpdate)
+    }
+    
+    /// Stream a message with optional web search support
+    func streamMessage(
+        messages: [ChatMessage],
+        model: StoreModel,
+        webSearchEnabled: Bool,
+        onUpdate: @escaping @Sendable (StreamingUpdate) async -> Void
+    ) async throws {
         guard let apiKey = configuration.apiKey, !apiKey.isEmpty else {
             throw AIProviderError.missingAPIKey
         }
@@ -64,13 +75,39 @@ actor OpenRouterProvider: AIProvider {
         // Check if model supports reasoning (Gemini, Claude, GPT-5, Grok reasoning models)
         let supportsReasoning = model.capabilities.contains(.reasoning)
         
+        // Convert messages to OpenRouter format, handling multimodal content
+        let openRouterMessages = messages.map { msg -> OpenRouterMessage in
+            switch msg.content {
+            case .text(let text):
+                return OpenRouterMessage(role: msg.role.rawValue, content: .text(text))
+            case .multipart(let parts):
+                let openRouterParts: [OpenRouterContentPart] = parts.compactMap { part in
+                    switch part {
+                    case .text(let text):
+                        return OpenRouterContentPart(type: "text", text: text)
+                    case .imageURL(let url, _):
+                        return OpenRouterContentPart(type: "image_url", image_url: OpenRouterImageURL(url: url))
+                    case .imageData(let base64, let mimeType):
+                        return OpenRouterContentPart(type: "image_url", image_url: OpenRouterImageURL(url: "data:\(mimeType);base64,\(base64)"))
+                    case .file(let filename, let base64, let mimeType):
+                        return OpenRouterContentPart(type: "file", file: OpenRouterFile(filename: filename, file_data: "data:\(mimeType);base64,\(base64)"))
+                    }
+                }
+                return OpenRouterMessage(role: msg.role.rawValue, content: .parts(openRouterParts))
+            }
+        }
+        
+        // For web search, append :online to the model ID (simpler than plugins array)
+        let effectiveModelId = webSearchEnabled ? "\(model.modelId):online" : model.modelId
+        
         let body = OpenRouterRequest(
-            model: model.modelId,
-            messages: messages.map { OpenRouterMessage(role: $0.role.rawValue, content: $0.content) },
+            model: effectiveModelId,
+            messages: openRouterMessages,
             stream: true,
             temperature: configuration.temperature,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens,
-            reasoning: supportsReasoning ? OpenRouterReasoningConfig(effort: "medium") : nil
+            reasoning: supportsReasoning ? OpenRouterReasoningConfig(effort: "medium") : nil,
+            plugins: nil
         )
         
         request.httpBody = try JSONEncoder().encode(body)
@@ -87,6 +124,22 @@ actor OpenRouterProvider: AIProvider {
         var fullReasoning = ""
         var isCurrentlyReasoning = false
         var reasoningHasCompleted = false
+        var collectedCitations: [String] = [] // Collect unique citation URLs
+        var isCurrentlySearchingWeb = webSearchEnabled // Start as true if web search is enabled
+        var hasReceivedContent = false // Track if we've received any content
+        
+        // Send initial update to show "Searching the web..." indicator
+        if webSearchEnabled {
+            let initialUpdate = StreamingUpdate(
+                content: "",
+                reasoning: nil,
+                isReasoning: false,
+                reasoningComplete: false,
+                citations: nil,
+                isSearchingWeb: true
+            )
+            await onUpdate(initialUpdate)
+        }
         
         for try await line in bytes.lines {
             // Check for cancellation
@@ -104,20 +157,56 @@ actor OpenRouterProvider: AIProvider {
                 continue
             }
             
-            // Handle reasoning_details from the streaming response
+            // Collect citations from annotations (web search results)
+            if let annotations = chunk.annotations {
+                for annotation in annotations {
+                    if let url = annotation.url, !url.isEmpty, !collectedCitations.contains(url) {
+                        collectedCitations.append(url)
+                    }
+                    if let urlCitation = annotation.url_citation, let url = urlCitation.url, !url.isEmpty, !collectedCitations.contains(url) {
+                        collectedCitations.append(url)
+                    }
+                }
+            }
+            
+            // Also check for annotations in the delta
+            if let deltaAnnotations = choice.delta?.annotations {
+                for annotation in deltaAnnotations {
+                    if let url = annotation.url, !url.isEmpty, !collectedCitations.contains(url) {
+                        collectedCitations.append(url)
+                    }
+                    if let urlCitation = annotation.url_citation, let url = urlCitation.url, !url.isEmpty, !collectedCitations.contains(url) {
+                        collectedCitations.append(url)
+                    }
+                }
+            }
+            
+            // Handle reasoning - prefer reasoning_details over reasoning field
+            // Only use one source to avoid duplication
+            var gotReasoningFromDetails = false
+            
             if let reasoningDetails = choice.delta?.reasoning_details {
                 for detail in reasoningDetails {
                     // Extract text from reasoning details
-                    if let text = detail.text {
+                    if let text = detail.text, !text.isEmpty {
                         fullReasoning += text
                         isCurrentlyReasoning = true
+                        gotReasoningFromDetails = true
                     }
                     // Handle summary type
-                    if let summary = detail.summary {
+                    if let summary = detail.summary, !summary.isEmpty {
                         fullReasoning += summary
                         isCurrentlyReasoning = true
+                        gotReasoningFromDetails = true
                     }
                 }
+            }
+            
+            // Only use 'reasoning' field if we didn't get anything from reasoning_details
+            // This prevents duplication when both fields contain the same content
+            if !gotReasoningFromDetails, let reasoning = choice.delta?.reasoning, !reasoning.isEmpty {
+                fullReasoning += reasoning
+                isCurrentlyReasoning = true
             }
             
             // Handle regular content
@@ -127,21 +216,22 @@ actor OpenRouterProvider: AIProvider {
                     reasoningHasCompleted = true
                     isCurrentlyReasoning = false
                 }
+                // Once we receive content, we're no longer in web search phase
+                if !content.isEmpty && isCurrentlySearchingWeb {
+                    isCurrentlySearchingWeb = false
+                    hasReceivedContent = true
+                }
                 fullContent += content
             }
             
-            // Also check for 'reasoning' field directly (non-streaming format sometimes appears in stream)
-            if let reasoning = choice.delta?.reasoning {
-                fullReasoning += reasoning
-                isCurrentlyReasoning = true
-            }
-            
-            // Send update
+            // Send update with citations and web search state
             let update = StreamingUpdate(
                 content: fullContent,
                 reasoning: fullReasoning.isEmpty ? nil : fullReasoning,
                 isReasoning: isCurrentlyReasoning,
-                reasoningComplete: reasoningHasCompleted
+                reasoningComplete: reasoningHasCompleted,
+                citations: collectedCitations.isEmpty ? nil : collectedCitations,
+                isSearchingWeb: isCurrentlySearchingWeb
             )
             await onUpdate(update)
         }
@@ -152,7 +242,9 @@ actor OpenRouterProvider: AIProvider {
                 content: fullContent,
                 reasoning: fullReasoning,
                 isReasoning: false,
-                reasoningComplete: true
+                reasoningComplete: true,
+                citations: collectedCitations.isEmpty ? nil : collectedCitations,
+                isSearchingWeb: false
             )
             await onUpdate(update)
         }
@@ -174,13 +266,36 @@ actor OpenRouterProvider: AIProvider {
         request.setValue("LocalChat/2.0", forHTTPHeaderField: "HTTP-Referer")
         request.setValue("LocalChat", forHTTPHeaderField: "X-Title")
         
+        // Convert messages to OpenRouter format, handling multimodal content
+        let openRouterMessages = messages.map { msg -> OpenRouterMessage in
+            switch msg.content {
+            case .text(let text):
+                return OpenRouterMessage(role: msg.role.rawValue, content: .text(text))
+            case .multipart(let parts):
+                let openRouterParts: [OpenRouterContentPart] = parts.compactMap { part in
+                    switch part {
+                    case .text(let text):
+                        return OpenRouterContentPart(type: "text", text: text)
+                    case .imageURL(let url, _):
+                        return OpenRouterContentPart(type: "image_url", image_url: OpenRouterImageURL(url: url))
+                    case .imageData(let base64, let mimeType):
+                        return OpenRouterContentPart(type: "image_url", image_url: OpenRouterImageURL(url: "data:\(mimeType);base64,\(base64)"))
+                    case .file(let filename, let base64, let mimeType):
+                        return OpenRouterContentPart(type: "file", file: OpenRouterFile(filename: filename, file_data: "data:\(mimeType);base64,\(base64)"))
+                    }
+                }
+                return OpenRouterMessage(role: msg.role.rawValue, content: .parts(openRouterParts))
+            }
+        }
+        
         let body = OpenRouterRequest(
             model: model.modelId,
-            messages: messages.map { OpenRouterMessage(role: $0.role.rawValue, content: $0.content) },
+            messages: openRouterMessages,
             stream: false,
             temperature: configuration.temperature,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens,
-            reasoning: nil
+            reasoning: nil,
+            plugins: nil
         )
         
         request.httpBody = try JSONEncoder().encode(body)
@@ -305,6 +420,51 @@ private struct OpenRouterRequest: Encodable {
     let temperature: Double?
     let max_tokens: Int?
     let reasoning: OpenRouterReasoningConfig?
+    let plugins: [OpenRouterPlugin]?
+    
+    enum CodingKeys: String, CodingKey {
+        case model, messages, stream, temperature, max_tokens, reasoning, plugins
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(model, forKey: .model)
+        try container.encode(messages, forKey: .messages)
+        try container.encode(stream, forKey: .stream)
+        try container.encodeIfPresent(temperature, forKey: .temperature)
+        try container.encodeIfPresent(max_tokens, forKey: .max_tokens)
+        try container.encodeIfPresent(reasoning, forKey: .reasoning)
+        try container.encodeIfPresent(plugins, forKey: .plugins)
+    }
+}
+
+/// Plugin configuration for OpenRouter requests (e.g., web search)
+private struct OpenRouterPlugin: Encodable {
+    let id: String
+    let max_results: Int?
+    let search_prompt: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id, max_results, search_prompt
+    }
+    
+    init(id: String, max_results: Int? = nil, search_prompt: String? = nil) {
+        self.id = id
+        self.max_results = max_results
+        self.search_prompt = search_prompt
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(max_results, forKey: .max_results)
+        try container.encodeIfPresent(search_prompt, forKey: .search_prompt)
+    }
+    
+    /// Create a web search plugin with default settings
+    static func webSearch(maxResults: Int = 5) -> OpenRouterPlugin {
+        OpenRouterPlugin(id: "web", max_results: maxResults)
+    }
 }
 
 /// Configuration for reasoning tokens in OpenRouter requests
@@ -323,9 +483,51 @@ private struct OpenRouterReasoningConfig: Encodable {
     }
 }
 
-private struct OpenRouterMessage: Codable {
+/// Message that supports both simple text and multimodal content
+private struct OpenRouterMessage: Encodable {
     let role: String
-    let content: String
+    let content: OpenRouterMessageContent
+    
+    enum OpenRouterMessageContent: Encodable {
+        case text(String)
+        case parts([OpenRouterContentPart])
+        
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            switch self {
+            case .text(let string):
+                try container.encode(string)
+            case .parts(let parts):
+                try container.encode(parts)
+            }
+        }
+    }
+}
+
+/// Content part for multimodal messages (text, image, or file)
+private struct OpenRouterContentPart: Encodable {
+    let type: String
+    let text: String?
+    let image_url: OpenRouterImageURL?
+    let file: OpenRouterFile?
+    
+    init(type: String, text: String? = nil, image_url: OpenRouterImageURL? = nil, file: OpenRouterFile? = nil) {
+        self.type = type
+        self.text = text
+        self.image_url = image_url
+        self.file = file
+    }
+}
+
+/// Image URL structure for vision models
+private struct OpenRouterImageURL: Encodable {
+    let url: String
+}
+
+/// File structure for document attachments (PDFs, etc.)
+private struct OpenRouterFile: Encodable {
+    let filename: String
+    let file_data: String // data:mime;base64,... or URL
 }
 
 private struct OpenRouterResponse: Decodable {
@@ -345,6 +547,8 @@ private struct OpenRouterResponseMessage: Decodable {
 
 private struct OpenRouterStreamChunk: Decodable {
     let choices: [OpenRouterStreamChoice]
+    /// Web search annotations from the response
+    let annotations: [OpenRouterAnnotation]?
 }
 
 private struct OpenRouterStreamChoice: Decodable {
@@ -355,6 +559,23 @@ private struct OpenRouterDelta: Decodable {
     let content: String?
     let reasoning: String?
     let reasoning_details: [OpenRouterReasoningDetail]?
+    /// Annotations can also appear at the delta level
+    let annotations: [OpenRouterAnnotation]?
+}
+
+/// Web search annotation containing citation sources
+private struct OpenRouterAnnotation: Decodable {
+    let type: String?
+    let url: String?
+    let title: String?
+    /// For url_citation type
+    let url_citation: OpenRouterURLCitation?
+}
+
+/// URL citation details from web search
+private struct OpenRouterURLCitation: Decodable {
+    let url: String?
+    let title: String?
 }
 
 /// Represents a reasoning detail in OpenRouter responses
@@ -425,7 +646,13 @@ struct OpenRouterModel: Decodable, Identifiable {
         let modelTitle = extractModelTitle(from: name)
         
         // Determine category, icon, and color based on provider and model name
-        let (category, iconName, accentColor, isSystemIcon) = categorizeModel(id: id, name: name, provider: provider)
+        let (category, iconName, accentColor, isSystemIcon) = categorizeModel(
+            id: id, 
+            name: name, 
+            provider: provider,
+            inputPrice: inputPrice,
+            outputPrice: outputPrice
+        )
         
         return StoreModel(
             id: id,
@@ -467,7 +694,7 @@ struct OpenRouterModel: Decodable, Identifiable {
         case "openai": return "OpenAI"
         case "anthropic": return "Anthropic"
         case "google": return "Google"
-        case "meta-llama": return "Meta"
+        case "meta-llama", "meta": return "Meta"
         case "mistralai": return "Mistral"
         case "deepseek": return "DeepSeek"
         case "x-ai": return "xAI"
@@ -476,10 +703,13 @@ struct OpenRouterModel: Decodable, Identifiable {
         case "nvidia": return "Nvidia"
         case "aion-labs": return "Aion Labs"
         case "minimax": return "Minimax"
-        case "bytedance": return "ByteDance"
+        case "bytedance", "bytedance-seed": return "ByteDance"
         case "qwen": return "Qwen"
         case "openrouter": return "OpenRouter"
         case "z-ai": return "Z.ai"
+        case "moonshotai": return "Moonshotai"
+        case "liquid": return "Liquid"
+        case "arcee": return "Arcee"
         default: return String(providerSlug).capitalized
         }
     }
@@ -496,21 +726,34 @@ struct OpenRouterModel: Decodable, Identifiable {
     
     /// Categorize model and determine icon/color based on provider and model characteristics
     /// Returns (category, iconName, accentColorHex, isSystemIcon)
-    private func categorizeModel(id: String, name: String, provider: String) -> (StoreModel.ModelCategory, String, String, Bool) {
+    private func categorizeModel(
+        id: String, 
+        name: String, 
+        provider: String,
+        inputPrice: Double?,
+        outputPrice: Double?
+    ) -> (StoreModel.ModelCategory, String, String, Bool) {
         let lowerId = id.lowercased()
         let lowerName = name.lowercased()
         
         // First, determine the category based on model characteristics
         let category: StoreModel.ModelCategory
-        if lowerId.contains("flash") || lowerName.contains("flash") || lowerName.contains("mini") || lowerName.contains("instant") {
+        
+        // Check for free models first - "(free)" in name or $0 pricing
+        let isFree = lowerName.contains("(free)") || 
+            ((inputPrice ?? 1) == 0 && (outputPrice ?? 1) == 0)
+        
+        if isFree {
+            category = .free
+        } else if isSpecificFlagshipModel(lowerName) {
+            // Specific flagship models by name
+            category = .flagship
+        } else if lowerId.contains("flash") || lowerName.contains("flash") || lowerName.contains("mini") || lowerName.contains("instant") {
             category = .fast
-        } else if lowerId.contains("vision") || lowerName.contains("vision") {
-            category = .vision
-        } else if lowerId.contains("code") || lowerName.contains("code") || lowerName.contains("codex") {
-            category = .coding
-        } else if lowerId.contains("reasoning") || lowerId.contains("-r1") || lowerName.contains("think") || lowerId.contains("deepseek") {
+        } else if lowerId.contains("reasoning") || lowerId.contains("-r1") || lowerName.contains("think") || lowerId.contains("deepseek-r") {
             category = .reasoning
         } else {
+            // Default to flagship for premium models
             category = .flagship
         }
         
@@ -534,41 +777,52 @@ struct OpenRouterModel: Decodable, Identifiable {
         case "nvidia":
             return (category, "nvidia-icon", "#000000", false)
         case "aion labs":
-            return (category, "aion-labs-icon", "#000000", false)
+            return (category, "aionlabs-icon", "#000000", false)
         case "minimax":
             return (category, "minimax-icon", "#000000", false)
         case "bytedance":
             return (category, "bytedance-icon", "#000000", false)
         case "qwen":
             return (category, "qwen-icon", "#000000", false)
+        case "meta":
+            return (category, "meta-icon", "#000000", false)
+        case "arcee":
+            return (category, "arcee-icon", "#000000", false)
             
-        // Providers with black/white template icons (like grok)
+        // Providers with black/white template icons (monochrome, use grok-color)
         case "openrouter":
             return (category, "openrouter-icon", "#000000", false)
         case "z.ai":
             return (category, "zai-icon", "#000000", false)
+        case "moonshotai":
+            return (category, "moonshot-icon", "#000000", false)
+        case "liquid":
+            return (category, "liquid-icon", "#000000", false)
             
         default:
-            // For other providers, use SF Symbols and determine color based on model family
-            let (icon, color) = determineIconAndColorForUnknownProvider(id: lowerId, name: lowerName)
-            return (category, icon, color, true)
+            // For unknown providers, use cpu.fill SF Symbol and grok-color (monochrome)
+            return (category, "cpu.fill", "#000000", true)
         }
     }
     
-    /// Determine icon and color for providers not in our known list
-    private func determineIconAndColorForUnknownProvider(id: String, name: String) -> (String, String) {
-        if id.contains("llama") || id.contains("meta") {
-            return ("flame.fill", "#0467DF")
-        } else if id.contains("cohere") {
-            return ("waveform", "#D18EE2")
-        } else if name.contains("vision") || id.contains("vision") {
-            return ("eye.fill", "#8E44AD")
-        } else if name.contains("code") || id.contains("code") {
-            return ("chevron.left.forwardslash.chevron.right", "#27AE60")
-        } else if name.contains("flash") || id.contains("flash") {
-            return ("bolt.fill", "#4285F4")
+    /// Check if model name matches specific flagship models
+    private func isSpecificFlagshipModel(_ lowerName: String) -> Bool {
+        // Flagship model patterns
+        let flagshipPatterns = [
+            "claude opus 4.5",
+            "claude sonnet 4.5", 
+            "gemini 3 pro",
+            "gemini 3 flash",
+            "gpt-5.2",
+            "gpt 5.2",
+        ]
+        
+        for pattern in flagshipPatterns {
+            if lowerName.contains(pattern) {
+                return true
+            }
         }
-        return ("cpu", "#6C757D")
+        return false
     }
     
     private func determineCapabilities(name: String) -> [StoreModel.Capability] {

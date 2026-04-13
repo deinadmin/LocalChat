@@ -80,7 +80,7 @@ actor CustomEndpointProvider: AIProvider {
         
         let body = OpenAIRequest(
             model: model.modelId,
-            messages: messages.map { OpenAIMessage(role: $0.role.rawValue, content: $0.content) },
+            messages: messages.map { OpenAIMessage(role: $0.role.rawValue, content: $0.content.textContent) },
             stream: true,
             temperature: configuration.temperature,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens
@@ -145,7 +145,7 @@ actor CustomEndpointProvider: AIProvider {
         
         let body = OpenAIRequest(
             model: model.modelId,
-            messages: messages.map { OpenAIMessage(role: $0.role.rawValue, content: $0.content) },
+            messages: messages.map { OpenAIMessage(role: $0.role.rawValue, content: $0.content.textContent) },
             stream: false,
             temperature: configuration.temperature,
             max_tokens: configuration.maxTokens ?? model.maxOutputTokens

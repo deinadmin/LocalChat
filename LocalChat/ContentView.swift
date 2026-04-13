@@ -48,31 +48,13 @@ struct MainContentView: View {
     // Navigation path for programmatic navigation
     @State private var navigationPath = NavigationPath()
     
-    // Drag gesture state - using @State to persist position during and after drag
-    @State private var dragOffset: CGFloat = 0
-    @State private var isDragging = false
-    @State private var dragStartedFromEdge = false
-    
     // Sidebar takes 80% of the screen, main content shows 20% when sidebar is open
     private let sidebarWidthRatio: CGFloat = 0.80
-    
-    // Edge swipe detection zone width
-    private let edgeSwipeWidth: CGFloat = 30
     
     var body: some View {
         GeometryReader { geometry in
             let sidebarWidth = geometry.size.width * sidebarWidthRatio
-            
-            // Calculate the current offset
-            let currentOffset: CGFloat = {
-                if isDragging {
-                    // During drag, use the drag offset directly (clamped)
-                    return max(0, min(sidebarWidth, dragOffset))
-                } else {
-                    // Not dragging, use the sidebar state
-                    return showSidebar ? sidebarWidth : 0
-                }
-            }()
+            let currentOffset: CGFloat = showSidebar ? sidebarWidth : 0
             
             ZStack(alignment: .leading) {
                 // Main content (chat list or chat detail) with overlay
@@ -97,16 +79,7 @@ struct MainContentView: View {
                     .frame(width: sidebarWidth)
                     .offset(x: currentOffset - sidebarWidth)
             }
-            .animation(isDragging ? nil : .spring(response: 0.35, dampingFraction: 0.8), value: showSidebar)
-            .gesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .global)
-                    .onChanged { value in
-                        handleDragChanged(value: value, sidebarWidth: sidebarWidth)
-                    }
-                    .onEnded { value in
-                        handleDragEnded(value: value, sidebarWidth: sidebarWidth)
-                    }
-            )
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: showSidebar)
             .sensoryFeedback(.impact(flexibility: .soft), trigger: showSidebar)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToModelStore"))) { _ in
@@ -142,67 +115,6 @@ struct MainContentView: View {
             NavigationStack {
                 SettingsView(showSidebar: $showSidebar)
             }
-        }
-    }
-    
-    // MARK: - Gesture Handlers
-    
-    private func handleDragChanged(value: DragGesture.Value, sidebarWidth: CGFloat) {
-        // On first change, determine if this is a valid edge swipe
-        if !isDragging {
-            if showSidebar {
-                // Sidebar is open - can drag from anywhere to close
-                isDragging = true
-                dragStartedFromEdge = true
-                dragOffset = sidebarWidth + value.translation.width
-            } else {
-                // Sidebar is closed - must start from left edge to open
-                if value.startLocation.x < edgeSwipeWidth {
-                    isDragging = true
-                    dragStartedFromEdge = true
-                    dragOffset = value.translation.width
-                } else {
-                    dragStartedFromEdge = false
-                }
-            }
-        } else if dragStartedFromEdge {
-            // Continue updating the drag offset
-            if showSidebar {
-                dragOffset = sidebarWidth + value.translation.width
-            } else {
-                dragOffset = value.translation.width
-            }
-        }
-    }
-    
-    private func handleDragEnded(value: DragGesture.Value, sidebarWidth: CGFloat) {
-        guard isDragging && dragStartedFromEdge else {
-            isDragging = false
-            return
-        }
-        
-        isDragging = false
-        
-        // Calculate velocity
-        let velocity = value.predictedEndTranslation.width - value.translation.width
-        
-        // Determine final position based on where the user released
-        let currentPosition = dragOffset
-        let halfwayPoint = sidebarWidth / 2
-        
-        // Use velocity to influence the decision
-        let shouldOpen: Bool
-        if abs(velocity) > 300 {
-            // Strong velocity - go in that direction
-            shouldOpen = velocity > 0
-        } else {
-            // Weak velocity - go to nearest state
-            shouldOpen = currentPosition > halfwayPoint
-        }
-        
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            showSidebar = shouldOpen
-            dragOffset = 0
         }
     }
     
